@@ -1,48 +1,121 @@
 package com.bookfair.backend.repository;
 
+import com.bookfair.backend.model.EventStall;
+import com.bookfair.backend.model.enums.AvailabilityStatus;
+import jakarta.persistence.LockModeType;
+import jakarta.persistence.QueryHint;
+import org.springframework.data.jpa.repository.*;
+import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
+
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Lock;
-import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.jpa.repository.QueryHints;
-import org.springframework.data.repository.query.Param;
-import org.springframework.stereotype.Repository;
-
-import org.springframework.data.jpa.repository.EntityGraph;
-
-import com.bookfair.backend.model.Event;
-import com.bookfair.backend.model.EventStall;
-import com.bookfair.backend.model.EventStall.AvailabilityStatus;
-
-import jakarta.persistence.LockModeType;
-import jakarta.persistence.QueryHint;
-
 @Repository
 public interface EventStallRepository extends JpaRepository<EventStall, UUID> {
 
-    List<EventStall> findByEventId(UUID eventId);
-
-    List<EventStall> findByEventIdAndActiveTrue(UUID eventId);
-
-    List<EventStall> findByStallIdAndActiveTrue(UUID stallId);
-
-    List<EventStall> findByEvent(Event event);
-
-    @EntityGraph(attributePaths = { "stall" })
-    @Query("SELECT es FROM EventStall es WHERE es.event.id = :eventId")
-    List<EventStall> findAllByEventIdWithStallData(@Param("eventId") UUID eventId);
-
-    List<EventStall> findByStatus(AvailabilityStatus status);
-
+    // Find one event stall by event and stall combination
+    @Query("""
+        SELECT es FROM EventStall es
+        JOIN FETCH es.stall s
+        WHERE es.event.id = :eventId
+        AND s.id = :stallId
+        """)
     Optional<EventStall> findByEventIdAndStallId(
-            UUID eventId,
-            UUID stallId);
+        @Param("eventId") UUID eventId,
+        @Param("stallId") UUID stallId);
 
+    // All active stalls for an event — what vendors see when browsing
+    @Query("""
+        SELECT es FROM EventStall es
+        JOIN FETCH es.stall s
+        JOIN FETCH s.hall h
+        WHERE es.event.id = :eventId
+        AND es.activeForEvent = true
+        ORDER BY h.name, s.name
+        """)
+    List<EventStall> findActiveByEventId(@Param("eventId") UUID eventId);
+
+    // Active stalls for a specific hall within an event
+    // Used for the hall layout map view
+    @Query("""
+        SELECT es FROM EventStall es
+        JOIN FETCH es.stall s
+        WHERE es.event.id = :eventId
+        AND s.hall.id = :hallId
+        AND es.activeForEvent = true
+        ORDER BY s.name
+        """)
+    List<EventStall> findByEventIdAndHallIdAndActiveForEventTrue(
+        @Param("eventId") UUID eventId,
+        @Param("hallId") UUID hallId);
+
+    // All stalls for an event in a hall — including disabled ones
+    // For organizer's management view
+    @Query("""
+        SELECT es FROM EventStall es
+        JOIN FETCH es.stall s
+        WHERE es.event.id = :eventId
+        AND s.hall.id = :hallId
+        ORDER BY s.name
+        """)
+    List<EventStall> findAllByEventIdAndHallId(
+        @Param("eventId") UUID eventId,
+        @Param("hallId") UUID hallId);
+
+    // Available stalls for vendor booking — active AND available
+    @Query("""
+        SELECT es FROM EventStall es
+        JOIN FETCH es.stall s
+        JOIN FETCH s.hall h
+        WHERE es.event.id = :eventId
+        AND es.activeForEvent = true
+        AND es.availabilityStatus = :status
+        ORDER BY h.name, s.name
+        """)
+    List<EventStall> findByEventIdAndAvailabilityStatus(
+        @Param("eventId") UUID eventId,
+        @Param("status") AvailabilityStatus status);
+
+    // Pessimistic lock for double-booking prevention
+    // Used in ReservationService when vendor books stalls
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @QueryHints(@QueryHint(name = "jakarta.persistence.lock.timeout", value = "3000"))
-    @Query("SELECT es FROM EventStall es WHERE es.id IN :ids AND es.active = true ORDER BY es.id ASC")
+    @QueryHints(@QueryHint(
+        name = "jakarta.persistence.lock.timeout",
+        value = "5000"))
+    @Query("""
+        SELECT es FROM EventStall es
+        WHERE es.id IN :ids
+        AND es.activeForEvent = true
+        """)
     List<EventStall> findAllForUpdate(@Param("ids") List<UUID> ids);
+
+    // Check if stall already has an event stall for this event
+    boolean existsByEventIdAndStallId(UUID eventId, UUID stallId);
+
+    // Count available stalls for an event — for dashboard metrics
+    long countByEventIdAndAvailabilityStatusAndActiveForEventTrue(
+        UUID eventId, AvailabilityStatus status);
+
+    // Bulk status update — used when event is cancelled
+    @Transactional
+    @Modifying
+    @Query("""
+        UPDATE EventStall es
+        SET es.availabilityStatus = :status
+        WHERE es.event.id = :eventId
+        AND es.availabilityStatus = 'AVAILABLE'
+        """)
+    int bulkUpdateStatusForEvent(
+        @Param("eventId") UUID eventId,
+        @Param("status") AvailabilityStatus status);
+
+    // Delete all event stalls for an event
+    // Used when event is cancelled and EventSpaceBooking is revoked
+    @Transactional
+    @Modifying
+    @Query("DELETE FROM EventStall es WHERE es.event.id = :eventId")
+    int deleteByEventId(@Param("eventId") UUID eventId);
 }
