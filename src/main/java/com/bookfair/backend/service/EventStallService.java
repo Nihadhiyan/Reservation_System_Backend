@@ -1,196 +1,247 @@
 package com.bookfair.backend.service;
 
-import org.springframework.cache.annotation.Cacheable;
-import org.springframework.context.ApplicationEventPublisher;
-import com.bookfair.backend.event.cache.EventStallUpdatedEvent;
-import java.util.List;
-import java.util.UUID;
-import java.util.stream.Collectors;
-
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
-import com.bookfair.backend.dto.event.mapper.EventMapper;
-import com.bookfair.backend.dto.event.request.CreateEventStallRequest;
-import com.bookfair.backend.dto.event.response.EventStallResponse;
+import com.bookfair.backend.dto.eventstall.mapper.EventStallMapper;
+import com.bookfair.backend.dto.eventstall.request.CreateEventStallRequest;
+import com.bookfair.backend.dto.eventstall.request.UpdateEventStallRequest;
+import com.bookfair.backend.dto.eventstall.response.EventStallResponse;
 import com.bookfair.backend.exception.BusinessException;
 import com.bookfair.backend.exception.ErrorCode;
 import com.bookfair.backend.exception.ResourceNotFoundException;
-import com.bookfair.backend.model.Event;
-import com.bookfair.backend.model.EventStall;
-import com.bookfair.backend.model.Hall;
-import com.bookfair.backend.model.Stall;
-import com.bookfair.backend.repository.EventRepository;
-import com.bookfair.backend.repository.EventStallRepository;
-import com.bookfair.backend.repository.HallRepository;
-import com.bookfair.backend.repository.StallRepository;
-import static java.util.Objects.requireNonNull;
-
+import com.bookfair.backend.model.*;
+import com.bookfair.backend.model.enums.AvailabilityStatus;
+import com.bookfair.backend.dto.common.LayoutPositionDto;
+import com.bookfair.backend.repository.*;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class EventStallService {
 
-        private final EventStallRepository eventStallRepository;
-        private final EventRepository eventRepository;
-        private final StallRepository stallRepository;
-        private final HallRepository hallRepository;
-        private final EventMapper eventMapper;
-        private final ApplicationEventPublisher eventPublisher;
+    private final EventStallRepository eventStallRepository;
+    private final EventRepository eventRepository;
+    private final StallRepository stallRepository;
+    private final EventStallMapper eventStallMapper;
+    private final ApplicationEventPublisher eventPublisher;
 
-        @Transactional
-        public EventStallResponse assignStallToEvent(CreateEventStallRequest request) {
-                requireNonNull(request, "request cannot be null");
-                Event event = eventRepository.findByIdAndActiveTrue(request.getEventId())
-                                .orElseThrow(() -> new ResourceNotFoundException("Event not found",
-                                                ErrorCode.EVENT_NOT_FOUND));
+    // Called automatically when an organizer's EventSpaceBooking is confirmed
+    // Generates EventStall records for all stalls in the booked spaces
+    // All start as active and available — organizer customizes after
+    @Transactional
+    public void generateEventStallsForEvent(UUID eventId, List<Stall> stalls) {
+        // Filter out stalls that already have EventStall records
+        // (prevents duplicates if called multiple times)
+        List<Stall> newStalls = stalls.stream()
+            .filter(s -> !eventStallRepository
+                .existsByEventIdAndStallId(eventId, s.getId()))
+            .toList();
 
-                Stall stall = stallRepository.findByIdAndActiveTrue(request.getStallId())
-                                .orElseThrow(() -> new ResourceNotFoundException("Stall not found",
-                                                ErrorCode.STALL_NOT_FOUND));
+        Event event = eventRepository.findById(eventId)
+            .orElseThrow(() -> new ResourceNotFoundException(
+                "Event not found", ErrorCode.EVENT_NOT_FOUND));
 
-                UUID stallVenueId = stall.getHall().getFloor().getBuilding().getVenue().getId();
-                if (!stallVenueId.equals(event.getVenue().getId())) {
-                        throw new BusinessException(
-                                        "Relational integrity violation: Stall does not belong to the Event's Venue.",
-                                        ErrorCode.BUSINESS_RULE_VIOLATION);
-                }
+        List<EventStall> eventStalls = newStalls.stream()
+            .map(stall -> EventStall.builder()
+                .event(event)
+                .stall(stall)
+                .activeForEvent(true)
+                .availabilityStatus(AvailabilityStatus.AVAILABLE)
+                .customLayout(null)
+                .customName(null)
+                .eventPrice(null)
+                .build())
+            .toList();
 
-                java.util.Optional<EventStall> existingOpt = eventStallRepository
-                                .findByEventIdAndStallId(request.getEventId(), request.getStallId());
-                if (existingOpt.isPresent()) {
-                        EventStall existing = existingOpt.get();
-                        if (Boolean.TRUE.equals(existing.getActive())) {
-                                throw new BusinessException("Stall is already assigned to this event.",
-                                                ErrorCode.BUSINESS_RULE_VIOLATION);
-                        } else {
-                                existing.setActive(true);
-                                existing.setStatus(EventStall.AvailabilityStatus.AVAILABLE);
-                                EventStall saved = eventStallRepository.save(existing);
-                                eventPublisher.publishEvent(new EventStallUpdatedEvent(request.getEventId()));
-                                return eventMapper.toEventStallResponse(saved);
-                        }
-                }
+        eventStallRepository.saveAll(eventStalls);
 
-                EventStall eventStall = eventMapper.toEventStall(request, event, stall);
+        log.info("Generated {} EventStall records for event [{}]",
+            eventStalls.size(), eventId);
+    }
 
-                EventStall saved = eventStallRepository.save(requireNonNull(eventStall));
-                // Publish event to trigger AFTER_COMMIT cache eviction
-                eventPublisher.publishEvent(new EventStallUpdatedEvent(request.getEventId()));
-                return eventMapper.toEventStallResponse(saved);
+    // Organizer adds a specific stall to their event with optional customization
+    @Transactional
+    @CacheEvict(value = "eventLayout", key = "#eventId + '*'")
+    public EventStallResponse addStallToEvent(
+            UUID eventId, CreateEventStallRequest request) {
+
+        Event event = eventRepository.findById(eventId)
+            .orElseThrow(() -> new ResourceNotFoundException(
+                "Event not found", ErrorCode.EVENT_NOT_FOUND));
+
+        Stall stall = stallRepository.findById(request.stallId())
+            .orElseThrow(() -> new ResourceNotFoundException(
+                "Stall not found", ErrorCode.STALL_NOT_FOUND));
+
+        // Check stall not already in this event
+        if (eventStallRepository.existsByEventIdAndStallId(eventId, stall.getId())) {
+            throw new BusinessException(
+                "Stall '" + stall.getName() + "' is already added to this event.",
+                ErrorCode.BUSINESS_RULE_VIOLATION);
         }
 
-        @Transactional(readOnly = true)
-        public EventStallResponse getEventStallById(UUID id) {
-                EventStall eventStall = eventStallRepository.findById(requireNonNull(id))
-                                .orElseThrow(() -> new ResourceNotFoundException("Event stall not found",
-                                                ErrorCode.EVENT_NOT_FOUND));
+        EventStall eventStall = EventStall.builder()
+            .event(event)
+            .stall(stall)
+            .activeForEvent(
+                request.activeForEvent() != null ? request.activeForEvent() : true)
+            .availabilityStatus(AvailabilityStatus.AVAILABLE)
+            .customLayout(request.customLayout() != null
+                ? new com.bookfair.backend.model.embedded.LayoutPosition(request.customLayout().x(), request.customLayout().y(), request.customLayout().width(), request.customLayout().length(), request.customLayout().rotation()) : null)
+            .customName(request.customName())
+            .eventPrice(request.eventPrice())
+            .build();
 
-                return eventMapper.toEventStallResponse(eventStall);
+        EventStall saved = eventStallRepository.save(eventStall);
+
+        log.info("Organizer added stall [{}] to event [{}]",
+            stall.getId(), eventId);
+
+        return eventStallMapper.toEventStallResponse(saved);
+    }
+
+    // Organizer updates stall configuration for their event
+    @Transactional
+    @CacheEvict(value = "eventLayout", key = "#eventId + '*'")
+    public EventStallResponse updateEventStall(
+            UUID eventId, UUID stallId, UpdateEventStallRequest request) {
+
+        EventStall eventStall = eventStallRepository
+            .findByEventIdAndStallId(eventId, stallId)
+            .orElseThrow(() -> new ResourceNotFoundException(
+                "EventStall not found for this event and stall",
+                ErrorCode.STALL_NOT_FOUND));
+
+        // Cannot deactivate a stall that is already booked by a vendor
+        if (request.activeForEvent() != null
+                && !request.activeForEvent()
+                && eventStall.getAvailabilityStatus() == AvailabilityStatus.BOOKED) {
+            throw new BusinessException(
+                "Cannot disable stall '"
+                + eventStall.getEffectiveName()
+                + "' — it is already booked by a vendor.",
+                ErrorCode.BUSINESS_RULE_VIOLATION);
         }
 
-        @Transactional
-        public EventStallResponse updateEventStall(UUID id, CreateEventStallRequest request) {
-                requireNonNull(request, "request cannot be null");
-                EventStall eventStall = eventStallRepository.findById(requireNonNull(id))
-                                .orElseThrow(() -> new ResourceNotFoundException("Event stall not found",
-                                                ErrorCode.EVENT_NOT_FOUND));
-
-                EventStall.AvailabilityStatus newStatus = EventStall.AvailabilityStatus
-                                .valueOf(request.getStatus().toUpperCase());
-                if (newStatus == EventStall.AvailabilityStatus.AVAILABLE &&
-                                (eventStall.getStatus() == EventStall.AvailabilityStatus.BOOKED
-                                                || eventStall.getStatus() == EventStall.AvailabilityStatus.BLOCKED)) {
-                        throw new BusinessException(
-                                        "Cannot manually change status to AVAILABLE while stall is currently booked or blocked by an active reservation.",
-                                        ErrorCode.BUSINESS_RULE_VIOLATION);
-                }
-
-                eventStall.setBasePrice(request.getBasePrice());
-                eventStall.setManualOverridePrice(request.getManualOverridePrice());
-                eventStall.setStatus(newStatus);
-
-                EventStall saved = eventStallRepository.save(eventStall);
-                // Publish event to trigger AFTER_COMMIT cache eviction
-                eventPublisher.publishEvent(new EventStallUpdatedEvent(saved.getEvent().getId()));
-                return eventMapper.toEventStallResponse(saved);
+        // Apply updates — only non-null values from request
+        if (request.activeForEvent() != null) {
+            eventStall.setActiveForEvent(request.activeForEvent());
+            // If disabling, block it so vendors can't book
+            if (!request.activeForEvent()) {
+                eventStall.setAvailabilityStatus(AvailabilityStatus.BLOCKED);
+            }
+            // If re-enabling, make it available again
+            if (request.activeForEvent()
+                    && eventStall.getAvailabilityStatus() == AvailabilityStatus.BLOCKED) {
+                eventStall.setAvailabilityStatus(AvailabilityStatus.AVAILABLE);
+            }
         }
 
-        @Transactional
-        public void removeStallFromEvent(UUID id) {
-                EventStall eventStall = eventStallRepository.findById(requireNonNull(id))
-                                .orElseThrow(() -> new ResourceNotFoundException("Event stall not found",
-                                                ErrorCode.EVENT_NOT_FOUND));
-
-                if (eventStall.getStatus() == EventStall.AvailabilityStatus.BOOKED
-                                || eventStall.getStatus() == EventStall.AvailabilityStatus.BLOCKED) {
-                        throw new BusinessException("Cannot remove a booked or blocked stall from the event.",
-                                        ErrorCode.BUSINESS_RULE_VIOLATION);
-                }
-
-                UUID eventId = eventStall.getEvent().getId();
-                eventStallRepository.delete(eventStall);
-                // Publish event to trigger AFTER_COMMIT cache eviction
-                eventPublisher.publishEvent(new EventStallUpdatedEvent(eventId));
+        if (request.customLayout() != null) {
+            // Validate new position doesn't overlap other stalls in this event
+            validateNoOverlapWithOtherEventStalls(eventId, stallId, request.customLayout());
+            eventStall.setCustomLayout(
+                new com.bookfair.backend.model.embedded.LayoutPosition(request.customLayout().x(), request.customLayout().y(), request.customLayout().width(), request.customLayout().length(), request.customLayout().rotation()));
         }
 
-        // Cache stalls assigned to an event by event ID
-        @Cacheable(value = "eventStalls", key = "#eventId")
-        @Transactional(readOnly = true)
-        public List<EventStallResponse> getStallsForEvent(UUID eventId) {
-                if (!eventRepository.findByIdAndActiveTrue(requireNonNull(eventId)).isPresent()) {
-                        throw new ResourceNotFoundException("Event not found", ErrorCode.EVENT_NOT_FOUND);
-                }
-
-                return eventStallRepository.findAllByEventIdWithStallData(eventId).stream()
-                                .filter(es -> es != null && Boolean.TRUE.equals(es.getActive())
-                                                && Boolean.TRUE.equals(es.getStall().getActive()))
-                                .map(eventMapper::toEventStallResponse)
-                                .collect(Collectors.toList());
+        if (request.customName() != null) {
+            eventStall.setCustomName(
+                request.customName().isBlank() ? null : request.customName());
         }
 
-        @Transactional
-        public List<EventStallResponse> copyAllStallsFromHall(UUID eventId, UUID hallId) {
-                Event event = eventRepository.findByIdAndActiveTrue(requireNonNull(eventId))
-                                .orElseThrow(() -> new ResourceNotFoundException("Event not found",
-                                                ErrorCode.EVENT_NOT_FOUND));
-
-                Hall hall = hallRepository.findById(requireNonNull(hallId))
-                                .orElseThrow(() -> new ResourceNotFoundException("Hall not found",
-                                                ErrorCode.HALL_NOT_FOUND));
-
-                UUID hallVenueId = hall.getFloor().getBuilding().getVenue().getId();
-                if (!hallVenueId.equals(event.getVenue().getId())) {
-                        throw new BusinessException(
-                                        "Relational integrity violation: Hall does not belong to the Event's Venue.",
-                                        ErrorCode.BUSINESS_RULE_VIOLATION);
-                }
-
-                List<Stall> stalls = stallRepository.findByHallIdAndActiveTrue(hallId);
-                List<EventStall> existingEventStalls = eventStallRepository.findByEventId(eventId);
-                java.util.Map<UUID, EventStall> existingByStallId = existingEventStalls.stream()
-                                .collect(Collectors.toMap(es -> es.getStall().getId(), es -> es));
-
-                List<EventStall> stallsToSave = new java.util.ArrayList<>();
-                for (Stall stall : stalls) {
-                        EventStall existing = existingByStallId.get(stall.getId());
-                        if (existing != null) {
-                                if (Boolean.FALSE.equals(existing.getActive())) {
-                                        existing.setActive(true);
-                                        existing.setStatus(EventStall.AvailabilityStatus.AVAILABLE);
-                                        stallsToSave.add(existing);
-                                }
-                        } else {
-                                stallsToSave.add(eventMapper.toCopiedEventStall(event, stall));
-                        }
-                }
-
-                eventStallRepository.saveAll(requireNonNull(stallsToSave));
-                // Publish event to trigger AFTER_COMMIT cache eviction
-                eventPublisher.publishEvent(new EventStallUpdatedEvent(eventId));
-                return eventStallRepository.findByEventIdAndActiveTrue(eventId).stream()
-                                .map(eventMapper::toEventStallResponse)
-                                .collect(Collectors.toList());
+        if (request.eventPrice() != null) {
+            eventStall.setEventPrice(request.eventPrice());
         }
+
+        EventStall saved = eventStallRepository.save(eventStall);
+
+        log.info("Organizer updated EventStall [{}] in event [{}]",
+            stallId, eventId);
+
+        return eventStallMapper.toEventStallResponse(saved);
+    }
+
+    // Vendor-facing — available stalls for an event
+    // This is what vendors see when browsing to book
+    @Transactional(readOnly = true)
+    @Cacheable(value = "eventLayout", key = "#eventId + '-all'")
+    public List<EventStallResponse> getAvailableStallsForEvent(UUID eventId) {
+        return eventStallRepository
+            .findByEventIdAndAvailabilityStatus(eventId, AvailabilityStatus.AVAILABLE)
+            .stream()
+            .map(eventStallMapper::toEventStallResponse)
+            .toList();
+    }
+
+    // Vendor-facing — available stalls in a specific hall within an event
+    // Used for the hall layout map view
+    @Transactional(readOnly = true)
+    @Cacheable(value = "eventLayout", key = "#eventId + '-' + #hallId")
+    public List<EventStallResponse> getEventLayoutForHall(UUID eventId, UUID hallId) {
+        return eventStallRepository
+            .findByEventIdAndHallIdAndActiveForEventTrue(eventId, hallId)
+            .stream()
+            .map(eventStallMapper::toEventStallResponse)
+            .toList();
+    }
+
+    // Organizer-facing — all stalls including disabled ones
+    // For the organizer's management view of their event layout
+    @Transactional(readOnly = true)
+    public List<EventStallResponse> getFullEventLayoutForHall(UUID eventId, UUID hallId) {
+        return eventStallRepository
+            .findAllByEventIdAndHallId(eventId, hallId)
+            .stream()
+            .map(eventStallMapper::toEventStallResponse)
+            .toList();
+    }
+
+    // Validate no spatial overlap with other active event stalls in the same hall
+    private void validateNoOverlapWithOtherEventStalls(
+            UUID eventId, UUID currentStallId, LayoutPositionDto newLayout) {
+
+        // Get stall's hall
+        EventStall current = eventStallRepository
+            .findByEventIdAndStallId(eventId, currentStallId)
+            .orElseThrow();
+
+        UUID hallId = current.getStall().getHall().getId();
+
+        List<EventStall> others = eventStallRepository
+            .findByEventIdAndHallIdAndActiveForEventTrue(eventId, hallId)
+            .stream()
+            .filter(es -> !es.getStall().getId().equals(currentStallId))
+            .toList();
+
+        for (EventStall other : others) {
+            com.bookfair.backend.model.embedded.LayoutPosition otherLayout = other.getEffectiveLayout();
+            if (otherLayout == null) continue;
+
+            if (rectanglesOverlap(
+                    newLayout.x(), newLayout.y(),
+                    newLayout.width(), newLayout.length(),
+                    otherLayout.getX(), otherLayout.getY(),
+                    otherLayout.getWidth(), otherLayout.getLength())) {
+                throw new BusinessException(
+                    "New position overlaps with stall '"
+                    + other.getEffectiveName() + "'.",
+                    ErrorCode.BUSINESS_RULE_VIOLATION);
+            }
+        }
+    }
+
+    private boolean rectanglesOverlap(
+            int x1, int y1, int w1, int h1,
+            int x2, int y2, int w2, int h2) {
+        return x1 < x2 + w2 && x1 + w1 > x2
+            && y1 < y2 + h2 && y1 + h1 > y2;
+    }
 }
