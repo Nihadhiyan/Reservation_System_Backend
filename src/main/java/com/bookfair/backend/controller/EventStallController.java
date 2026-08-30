@@ -1,65 +1,89 @@
 package com.bookfair.backend.controller;
 
+import com.bookfair.backend.dto.common.ApiResponseDto;
+import com.bookfair.backend.dto.eventstall.request.CreateEventStallRequest;
+import com.bookfair.backend.dto.eventstall.request.UpdateEventStallRequest;
+import com.bookfair.backend.dto.eventstall.response.EventStallResponse;
+import com.bookfair.backend.service.EventStallService;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.*;
+
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
-import org.springframework.http.HttpStatus;
-import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.ResponseStatus;
-import org.springframework.web.bind.annotation.RestController;
-
-import com.bookfair.backend.dto.common.ApiResponseDto;
-import com.bookfair.backend.dto.event.request.CreateEventStallRequest;
-import com.bookfair.backend.dto.event.response.EventStallResponse;
-import com.bookfair.backend.service.EventStallService;
-
-import jakarta.validation.Valid;
-import lombok.RequiredArgsConstructor;
-
 @RestController
-@RequestMapping("/api/v1/event-stalls")
+@RequestMapping("/api/v1/events/{eventId}/stalls")
 @RequiredArgsConstructor
-@PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ORG_ADMIN')")
 public class EventStallController {
 
     private final EventStallService eventStallService;
 
+    // VENDOR — browse available stalls for booking
+    // Returns only active + available stalls
+    @GetMapping("/available")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<ApiResponseDto<List<EventStallResponse>>> getAvailableStalls(
+            @PathVariable UUID eventId) {
+        List<EventStallResponse> data =
+            eventStallService.getAvailableStallsForEvent(eventId);
+        return ResponseEntity.ok(new ApiResponseDto<>(
+            true, "Available stalls fetched", data, Instant.now()));
+    }
+
+    // VENDOR — hall layout map view (active stalls only)
+    // Frontend uses this to render the color-coded stall map
+    @GetMapping("/hall/{hallId}/layout")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<ApiResponseDto<List<EventStallResponse>>> getHallLayout(
+            @PathVariable UUID eventId,
+            @PathVariable UUID hallId) {
+        List<EventStallResponse> data =
+            eventStallService.getEventLayoutForHall(eventId, hallId);
+        return ResponseEntity.ok(new ApiResponseDto<>(
+            true, "Hall layout fetched", data, Instant.now()));
+    }
+
+    // ORGANIZER — full hall layout including disabled stalls
+    // For the organizer's management dashboard
+    @GetMapping("/hall/{hallId}/manage")
+    @PreAuthorize("hasRole('SUPER_ADMIN') or @orgAuth.isOrganizerAdmin(authentication, #eventId)")
+    public ResponseEntity<ApiResponseDto<List<EventStallResponse>>> getFullHallLayout(
+            @PathVariable UUID eventId,
+            @PathVariable UUID hallId) {
+        List<EventStallResponse> data =
+            eventStallService.getFullEventLayoutForHall(eventId, hallId);
+        return ResponseEntity.ok(new ApiResponseDto<>(
+            true, "Full hall layout fetched", data, Instant.now()));
+    }
+
+    // ORGANIZER — add a stall to the event with optional customization
     @PostMapping
-    @ResponseStatus(HttpStatus.CREATED)
-    public ApiResponseDto<EventStallResponse> assignStallToEvent(@Valid @RequestBody CreateEventStallRequest request) {
-        EventStallResponse data = eventStallService.assignStallToEvent(request);
-        return new ApiResponseDto<>(true, "Stall assigned to event successfully", data, Instant.now());
+    @PreAuthorize("hasRole('SUPER_ADMIN') or @orgAuth.isOrganizerAdmin(authentication, #eventId)")
+    public ResponseEntity<ApiResponseDto<EventStallResponse>> addStallToEvent(
+            @PathVariable UUID eventId,
+            @Valid @RequestBody CreateEventStallRequest request) {
+        EventStallResponse data =
+            eventStallService.addStallToEvent(eventId, request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(new ApiResponseDto<>(
+            true, "Stall added to event", data, Instant.now()));
     }
 
-    @GetMapping("/{id}")
-    public ApiResponseDto<EventStallResponse> getEventStallById(@PathVariable UUID id) {
-        EventStallResponse data = eventStallService.getEventStallById(id);
-        return new ApiResponseDto<>(true, "Event stall fetched successfully", data, Instant.now());
-    }
-
-    @PutMapping("/{id}")
-    public ApiResponseDto<EventStallResponse> updateEventStall(@PathVariable UUID id, @Valid @RequestBody CreateEventStallRequest request) {
-        EventStallResponse data = eventStallService.updateEventStall(id, request);
-        return new ApiResponseDto<>(true, "Event stall updated successfully", data, Instant.now());
-    }
-
-    @DeleteMapping("/{id}")
-    public ApiResponseDto<Void> removeStallFromEvent(@PathVariable UUID id) {
-        eventStallService.removeStallFromEvent(id);
-        return new ApiResponseDto<>(true, "Stall removed from event successfully", null, Instant.now());
-    }
-
-    @GetMapping("/event/{eventId}")
-    public ApiResponseDto<List<EventStallResponse>> getStallsForEvent(@PathVariable UUID eventId) {
-        List<EventStallResponse> data = eventStallService.getStallsForEvent(eventId);
-        return new ApiResponseDto<>(true, "Event stalls fetched successfully", data, Instant.now());
+    // ORGANIZER — update stall configuration for this event
+    // Can disable, reposition, relabel, or reprice a stall
+    @PutMapping("/{stallId}")
+    @PreAuthorize("hasRole('SUPER_ADMIN') or @orgAuth.isOrganizerAdmin(authentication, #eventId)")
+    public ResponseEntity<ApiResponseDto<EventStallResponse>> updateEventStall(
+            @PathVariable UUID eventId,
+            @PathVariable UUID stallId,
+            @Valid @RequestBody UpdateEventStallRequest request) {
+        EventStallResponse data =
+            eventStallService.updateEventStall(eventId, stallId, request);
+        return ResponseEntity.ok(new ApiResponseDto<>(
+            true, "Event stall updated", data, Instant.now()));
     }
 }
