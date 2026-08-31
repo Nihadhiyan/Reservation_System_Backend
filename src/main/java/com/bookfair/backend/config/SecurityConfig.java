@@ -11,13 +11,15 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 import com.bookfair.backend.config.filter.IpBlastShieldFilter;
-import com.bookfair.backend.config.filter.JwtAuthenticationFilter;
+import com.bookfair.backend.config.filter.MaintenanceModeFilter;
 import com.bookfair.backend.config.filter.UserQuotaFilter;
 import com.bookfair.backend.security.JwtAuthEntryPoint;
+import com.bookfair.backend.security.keycloak.KeycloakJwtAuthenticationConverter;
 
 import jakarta.annotation.PostConstruct;
 import lombok.AllArgsConstructor;
@@ -28,10 +30,11 @@ import lombok.AllArgsConstructor;
 @AllArgsConstructor
 public class SecurityConfig {
 
-    private final JwtAuthenticationFilter jwtFilter;
     private final JwtAuthEntryPoint authEntryPoint;
     private final IpBlastShieldFilter ipBlastShieldFilter;
     private final UserQuotaFilter userQuotaFilter;
+    private final MaintenanceModeFilter maintenanceModeFilter;
+    private final KeycloakJwtAuthenticationConverter keycloakJwtAuthenticationConverter;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -47,9 +50,15 @@ public class SecurityConfig {
                         .requestMatchers("/actuator/**").hasRole("SUPER_ADMIN")
                         .anyRequest().authenticated())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                // Bearer token verification (signature + expiry, via Keycloak's JWKS) and
+                // extraction is Spring's built-in resource-server filter; authorization
+                // still comes entirely from our own DB via the custom converter above.
+                .oauth2ResourceServer(oauth2 -> oauth2
+                        .authenticationEntryPoint(authEntryPoint)
+                        .jwt(jwt -> jwt.jwtAuthenticationConverter(keycloakJwtAuthenticationConverter)))
                 .addFilterBefore(ipBlastShieldFilter, UsernamePasswordAuthenticationFilter.class)
-                .addFilterAfter(jwtFilter, IpBlastShieldFilter.class)
-                .addFilterAfter(userQuotaFilter, JwtAuthenticationFilter.class)
+                .addFilterAfter(userQuotaFilter, BearerTokenAuthenticationFilter.class)
+                .addFilterAfter(maintenanceModeFilter, UserQuotaFilter.class)
                 .build();
     }
 

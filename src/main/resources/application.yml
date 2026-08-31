@@ -83,6 +83,21 @@ spring:
     locations: classpath:db/migration
 
   # ===============================
+  # OAuth2 Resource Server (Keycloak)
+  # ===============================
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # jwk-set-uri (not issuer-uri): NimbusJwtDecoder.withJwkSetUri() only
+          # fetches keys lazily on first token verification. issuer-uri instead
+          # makes Spring Boot fetch /.well-known/openid-configuration eagerly
+          # while building the JwtDecoder bean at context startup — which would
+          # make the whole application fail to boot (including every test that
+          # loads a full ApplicationContext) any time Keycloak isn't reachable.
+          jwk-set-uri: ${KEYCLOAK_JWK_SET_URI:http://localhost:8081/realms/clausis-realm/protocol/openid-connect/certs}
+
+  # ===============================
   # Kafka Configuration
   # ===============================
   kafka:
@@ -116,6 +131,15 @@ app:
   jwt-secret: ${JWT_SECRET}
   cors:
     allowed-origins: ${CORS_ORIGINS:http://localhost:5173}
+
+# ===============================
+# Keycloak (server-to-server: token exchange + Admin API)
+# ===============================
+keycloak:
+  server-url: ${KEYCLOAK_SERVER_URL:http://localhost:8081}
+  realm: ${KEYCLOAK_REALM:clausis-realm}
+  client-id: ${KEYCLOAK_CLIENT_ID:clausis-backend}
+  client-secret: ${KEYCLOAK_CLIENT_SECRET:clausis-backend-secret}
 
 # ===============================
 # Server Configuration

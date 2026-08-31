@@ -36,19 +36,30 @@ import com.bookfair.backend.repository.OrganizationMemberRepository;
 import com.bookfair.backend.repository.OrganizationRepository;
 import com.bookfair.backend.repository.UserRepository;
 import com.bookfair.backend.security.JwtService;
-import com.bookfair.backend.model.RefreshToken;
-import com.bookfair.backend.util.RequestUtils;
-
-import io.jsonwebtoken.Claims;
+import com.bookfair.backend.security.keycloak.KeycloakIdentityService;
+import com.bookfair.backend.util.SecurityUtils;
 
 import com.bookfair.backend.exception.UnauthorizedException;
+import com.nimbusds.jwt.JWTClaimsSet;
+import com.nimbusds.jwt.JWTParser;
 import jakarta.servlet.http.HttpServletRequest;
-import com.bookfair.backend.util.SecurityUtils;
 import static java.util.Objects.*;
 import org.springframework.transaction.annotation.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+/**
+ * Credential verification and session token issuance now live in Keycloak
+ * (see KeycloakIdentityService) — this class stays responsible for
+ * everything Keycloak has no equivalent for: local business-data creation on
+ * registration, brute-force lockout (LoginAttemptService, checked BEFORE
+ * Keycloak is ever asked to verify a password), and the single-purpose
+ * password-reset/email-verification tokens (JwtService). Registration and
+ * password changes keep a local BCrypt hash in sync purely so
+ * changePassword's "confirm your current password" check keeps working
+ * without a round trip to Keycloak — Keycloak's copy is always the one that
+ * actually gates login.
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -62,6 +73,7 @@ public class AuthService {
     private final JwtService jwtService;
     private final TokenManagementService tokenManagementService;
     private final TokenBlacklistService tokenBlacklistService;
+    private final KeycloakIdentityService keycloakIdentityService;
     private final ApplicationEventPublisher eventPublisher;
     private final LoginAttemptService loginAttemptService;
     private final OrganizationMapper organizationMapper;
@@ -80,17 +92,8 @@ public class AuthService {
             throw new DuplicateResourceException("Email is already registered", ErrorCode.DUPLICATE_EMAIL);
         }
 
-        User user = authMapper.toUserFromRegisterRequest(registerRequest);
-
-        user.setPassword(passwordEncoder.encode(registerRequest.password()));
-        user.setSystemRole(SystemRole.CUSTOMER); // Base role for all regular signups
-
-        User savedUser = null;
-
-        if (registerRequest.organizationDetails() != null) {
-
-            CreateOrganizationRequest orgDto = registerRequest.organizationDetails();
-
+        CreateOrganizationRequest orgDto = registerRequest.organizationDetails();
+        if (orgDto != null) {
             if (organizationRepository.existsByNameAndActiveTrue(orgDto.name())) {
                 throw new DuplicateResourceException(
                         "An organization with the name '" + orgDto.name()
@@ -103,10 +106,16 @@ public class AuthService {
                         "An organization with the same registration number already exists.",
                         ErrorCode.DUPLICATE_REGISTRATION_NUMBER);
             }
-            savedUser = userRepository.save(user);
+        }
 
+        User user = authMapper.toUserFromRegisterRequest(registerRequest);
+        user.setPassword(passwordEncoder.encode(registerRequest.password()));
+        user.setSystemRole(SystemRole.CUSTOMER); // Base role for all regular signups
+
+        User savedUser = userRepository.save(user);
+
+        if (orgDto != null) {
             Organization organization = organizationMapper.toOrganizationFromRegisterRequest(orgDto);
-
             Organization savedOrganization = organizationRepository.save(requireNonNull(organization));
 
             OrganizationMember member = organizationMapper.toOrganizationMember(savedUser, savedOrganization,
@@ -114,33 +123,15 @@ public class AuthService {
             memberRepository.save(requireNonNull(member));
         }
 
-
-        String accessToken = jwtService.generateAccessToken(savedUser);
-        String refreshTokenString = jwtService.generateRefreshToken(savedUser);
-
-        String jti = jwtService.extractJti(refreshTokenString);
-
-        // Persist granular session in PostgreSQL
-        String ipAddress = RequestUtils.getClientIpAddress(request);
-        String deviceInfo = RequestUtils.getDeviceInfo(request);
-
-        String newFamilyId = UUID.randomUUID().toString();
-
-        tokenManagementService.createAndStoreRefreshToken(
-            savedUser,
-            jti,
-            jwtService.getRefreshTokenExpirationTime(),
-            ipAddress,
-            deviceInfo,
-            newFamilyId);
+        keycloakIdentityService.createUser(savedUser.getUsername(), savedUser.getEmail(), registerRequest.password());
 
         eventPublisher.publishEvent(
-                new UserRegisteredEvent(requireNonNull(savedUser, "User not found").getId(), savedUser.getUsername(), savedUser.getEmail()));
+                new UserRegisteredEvent(savedUser.getId(), savedUser.getUsername(), savedUser.getEmail()));
 
-        Long expiresIn = jwtService.getAccessTokenExpirationTime() / 1000; // 1 hour in seconds
+        KeycloakIdentityService.TokenResponse tokens = keycloakIdentityService.passwordGrant(
+                savedUser.getUsername(), registerRequest.password());
 
-        return authMapper.toAuthResponse(savedUser, accessToken, refreshTokenString, expiresIn);
-
+        return authMapper.toAuthResponse(savedUser, tokens.accessToken(), tokens.refreshToken(), tokens.expiresIn());
     }
 
     @Transactional
@@ -159,42 +150,27 @@ public class AuthService {
                 .or(() -> userRepository.findByEmailAndActiveTrue(username))
                 .orElseThrow(() -> new UnauthorizedException("Invalid username or password", ErrorCode.UNAUTHORIZED));
 
-        if (!passwordEncoder.matches(loginRequest.password(), user.getPassword())) {
+        KeycloakIdentityService.TokenResponse tokens;
+        try {
+            // loginRequest.username() may actually be the user's email; Keycloak's
+            // own username is canonical, so always exchange with the resolved
+            // local user's real username rather than whatever the caller typed.
+            tokens = keycloakIdentityService.passwordGrant(user.getUsername(), loginRequest.password());
+        } catch (UnauthorizedException e) {
             loginAttemptService.recordFailedAttempt(username);
             if (loginAttemptService.isLocked(username)) {
                 eventPublisher
                         .publishEvent(new UserAccountLockedEvent(user.getId(), user.getUsername(), user.getEmail()));
             }
-            throw new UnauthorizedException("Invalid username or password", ErrorCode.UNAUTHORIZED);
+            throw e;
         }
 
         loginAttemptService.resetAttempts(username);
 
-        String accessToken = jwtService.generateAccessToken(user);
-        String refreshTokenString = jwtService.generateRefreshToken(user);
-
-        String jti = jwtService.extractJti(refreshTokenString);
-
-        // Persist granular login session in database
-        String ipAddress = RequestUtils.getClientIpAddress(request);
-        String deviceInfo = RequestUtils.getDeviceInfo(request);
-
-        String newFamilyId = UUID.randomUUID().toString();
-
-        tokenManagementService.createAndStoreRefreshToken(
-                user,
-                jti,
-                jwtService.getRefreshTokenExpirationTime(),
-                ipAddress,
-                deviceInfo,
-                newFamilyId);
-
-        Long expiresIn = jwtService.getAccessTokenExpirationTime() / 1000; // 1 hour in seconds
-
-        return authMapper.toAuthResponse(user, accessToken, refreshTokenString, expiresIn);
+        return authMapper.toAuthResponse(user, tokens.accessToken(), tokens.refreshToken(), tokens.expiresIn());
     }
 
-    @Transactional
+    @Transactional(readOnly = true)
     public AuthResponse refreshToken(RefreshTokenRequest refreshTokenRequest, HttpServletRequest request) {
         requireNonNull(refreshTokenRequest, "RefreshTokenRequest cannot be null");
         requireNonNull(request, "HttpServletRequest cannot be null");
@@ -202,115 +178,30 @@ public class AuthService {
         String oldTokenString = refreshTokenRequest.refreshToken();
         requireNonNull(oldTokenString, "Refresh token string cannot be null");
 
-        Claims claims;
-        try {
-            claims = jwtService.extractAllClaims(oldTokenString);
-        } catch (Exception e) {
-            throw new UnauthorizedException(
-                    "Refresh token is expired or invalid. Please log in again.", ErrorCode.UNAUTHORIZED);
-        }
+        // Rotation, reuse detection, and expiry are all enforced by Keycloak itself
+        // (the client is configured with revokeRefreshToken) — no local session
+        // table or breach-detection bookkeeping needed on this path any more.
+        KeycloakIdentityService.TokenResponse tokens = keycloakIdentityService.refreshGrant(oldTokenString);
 
-        String tokenJti = claims.getId();
-
-        // Verifying persistent device session against PostgreSQL
-        RefreshToken session = tokenManagementService.findByTokenJti(tokenJti)
-                .orElseThrow(() -> new UnauthorizedException("Refresh token session is invalid or has been revoked",
-                        ErrorCode.UNAUTHORIZED));
-
-        if (session.isRevoked()) {
-            log.error("BREACH DETECTED: Attempted reuse of revoked token JTI [{}] for Family [{}]", tokenJti, session.getFamilyId());
-
-            tokenManagementService.revokeDeviceSessionByFamilyId(session.getFamilyId());
-
-            tokenBlacklistService.createSecurityCheckpoint(session.getUser().getId());
-
-            throw new UnauthorizedException("Security breach detected. Please log in again.", ErrorCode.SECURITY_BREACH);
-        }
-
-        session.setRevoked(true);
-        tokenManagementService.saveSession(session);
-
-        UUID userId = UUID.fromString(claims.getSubject());
-
-        User user = userRepository.findByIdAndActiveTrue(userId)
+        String email = extractEmailClaimUnverified(tokens.accessToken());
+        User user = userRepository.findByEmailAndActiveTrue(email)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found", ErrorCode.USER_NOT_FOUND));
 
-        /*
-            * CRITICAL REQUIREMENT - SOFT REVOCATIONS:
-            * Why we query fresh database roles: When issuing a new Access Token during a
-            * refresh cycle,
-            * we DO NOT simply copy claims from the old token or user entity in memory.
-            * Instead,
-            * calling jwtService.generateAccessToken(user) triggers a live database query
-            * against
-            * OrganizationMemberRepository.findByUserId(user.getId()).
-            * This ensures that if an administrator recently demoted the user or removed
-            * them from an
-            * organization, those role updates are instantly reflected in the new Access
-            * Token payload
-            * without requiring the user to execute a hard logout or re-authenticate.
-            */
-        String newAccessToken = jwtService.generateAccessToken(user);
-        String newRefreshTokenString = jwtService.generateRefreshToken(user);
-
-        String jti = jwtService.extractJti(newRefreshTokenString);
-
-
-        String ipAddress = RequestUtils.getClientIpAddress(request);
-        String deviceInfo = RequestUtils.getDeviceInfo(request);
-
-        String inheritedFamilyId = session.getFamilyId();
-
-        tokenManagementService.createAndStoreRefreshToken(
-                user,
-                jti,
-                jwtService.getRefreshTokenExpirationTime(),
-                ipAddress,
-                deviceInfo,
-                inheritedFamilyId);
-
-        Long expiresIn = jwtService.getAccessTokenExpirationTime() / 1000;
-
-        return authMapper.toAuthResponse(user, newAccessToken, newRefreshTokenString, expiresIn);
-
+        return authMapper.toAuthResponse(user, tokens.accessToken(), tokens.refreshToken(), tokens.expiresIn());
     }
 
     @Transactional
     public void logout(String authHeader, RefreshTokenRequest refreshTokenRequest) {
 
-        log.info("User requested logout. Frontend should clear tokens.");
+        log.info("User requested logout.");
 
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            return;
+        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            blacklistRemainingLifetime(authHeader.substring(7));
         }
 
-        String token = authHeader.substring(7);
-
-        long remainingTime = jwtService.getRemainingExpirationTime(token) / 1000;
-
-        if (remainingTime > 0) {
-            try {
-                String jti = jwtService.extractJti(token);
-                if (jti != null) {
-                    tokenBlacklistService.blacklistAccessTokenId(jti, remainingTime);
-                }
-                UUID userId = jwtService.extractUserId(token);
-                if (userId != null && refreshTokenRequest != null && refreshTokenRequest.refreshToken() != null
-                        && !refreshTokenRequest.refreshToken().isBlank()) {
-
-                    String refreshTokenJti = jwtService.extractJti(refreshTokenRequest.refreshToken());
-
-                    RefreshToken refreshToken = tokenManagementService.findByTokenJti(refreshTokenJti)
-                        .orElseThrow(() -> new UnauthorizedException("Refresh token not found", ErrorCode.UNAUTHORIZED));
-
-                    tokenManagementService.revokeDeviceSessionByFamilyId(refreshToken.getFamilyId());
-                }
-
-                log.info("Token successfully blacklisted and session removed.");
-            } catch (Exception e) {
-                log.warn("Failed to blacklist token or remove session: {}. Token will expire naturally.",
-                        e.getMessage());
-            }
+        if (refreshTokenRequest != null && refreshTokenRequest.refreshToken() != null
+                && !refreshTokenRequest.refreshToken().isBlank()) {
+            keycloakIdentityService.logout(refreshTokenRequest.refreshToken());
         }
     }
 
@@ -354,6 +245,7 @@ public class AuthService {
 
         user.setPassword(passwordEncoder.encode(request.newPassword()));
         userRepository.save(user);
+        keycloakIdentityService.updateUserPassword(user.getUsername(), request.newPassword());
 
         eventPublisher.publishEvent(new UserPasswordChangedEvent(user.getId(), user.getUsername(), user.getEmail()));
     }
@@ -376,6 +268,7 @@ public class AuthService {
 
         user.setPassword(passwordEncoder.encode(changePasswordRequest.newPassword()));
         userRepository.save(user);
+        keycloakIdentityService.updateUserPassword(user.getUsername(), changePasswordRequest.newPassword());
 
         eventPublisher.publishEvent(new UserPasswordChangedEvent(user.getId(), user.getUsername(), user.getEmail()));
 
@@ -431,5 +324,32 @@ public class AuthService {
             eventPublisher.publishEvent(
                     new UserEmailVerificationRequestedEvent(user.getId(), user.getUsername(), verificationLink, user.getEmail()));
         });
+    }
+
+    private void blacklistRemainingLifetime(String accessToken) {
+        try {
+            JWTClaimsSet claims = JWTParser.parse(accessToken).getJWTClaimsSet();
+            String jti = claims.getJWTID();
+            if (jti == null || claims.getExpirationTime() == null) {
+                return;
+            }
+            long remainingSeconds = (claims.getExpirationTime().getTime() - System.currentTimeMillis()) / 1000;
+            if (remainingSeconds > 0) {
+                tokenBlacklistService.blacklistAccessTokenId(jti, remainingSeconds);
+            }
+        } catch (Exception e) {
+            log.warn("Failed to parse access token during logout for blacklisting: {}. Token will expire naturally.",
+                    e.getMessage());
+        }
+    }
+
+    private String extractEmailClaimUnverified(String accessToken) {
+        try {
+            JWTClaimsSet claims = JWTParser.parse(accessToken).getJWTClaimsSet();
+            return claims.getStringClaim("email");
+        } catch (Exception e) {
+            throw new BusinessException("Received a malformed token from the identity provider",
+                    ErrorCode.SERVICE_UNAVAILABLE);
+        }
     }
 }

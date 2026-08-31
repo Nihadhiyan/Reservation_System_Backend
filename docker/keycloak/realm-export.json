@@ -1,0 +1,45 @@
+{
+  "realm": "clausis-realm",
+  "enabled": true,
+  "accessTokenLifespan": 300,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 36000,
+  "revokeRefreshToken": true,
+  "refreshTokenMaxReuse": 0,
+  "bruteForceProtected": false,
+
+  "roles": {
+    "realm": [
+      { "name": "SUPER_ADMIN", "description": "Platform owner (SystemRole)" },
+      { "name": "CUSTOMER", "description": "Standard public user (SystemRole)" },
+      { "name": "ORG_ADMIN", "description": "Organization admin (OrganizationRole)" },
+      { "name": "ORG_MEMBER", "description": "Organization member (OrganizationRole)" }
+    ]
+  },
+
+  "clients": [
+    {
+      "clientId": "clausis-backend",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "clausis-backend-secret",
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": true,
+      "defaultClientScopes": ["email", "profile", "roles", "web-origins"]
+    }
+  ],
+
+  "users": [
+    {
+      "username": "service-account-clausis-backend",
+      "enabled": true,
+      "serviceAccountClientId": "clausis-backend",
+      "clientRoles": {
+        "realm-management": ["manage-users"]
+      }
+    }
+  ]
+}

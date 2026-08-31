@@ -61,6 +61,13 @@ services:
       # localhost:9092 advertised listener, which would be unreachable from
       # inside this container.
       - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      # Container-internal URLs — the browser never talks to Keycloak directly
+      # (see KeycloakIdentityService); only this backend does, server-to-server.
+      - KEYCLOAK_SERVER_URL=http://keycloak:8080
+      - KEYCLOAK_JWK_SET_URI=http://keycloak:8080/realms/clausis-realm/protocol/openid-connect/certs
+      - KEYCLOAK_REALM=clausis-realm
+      - KEYCLOAK_CLIENT_ID=clausis-backend
+      - KEYCLOAK_CLIENT_SECRET=${KEYCLOAK_CLIENT_SECRET:-clausis-backend-secret}
     depends_on:
       postgres:
         condition: service_healthy
@@ -68,12 +75,66 @@ services:
         condition: service_healthy
       kafka:
         condition: service_healthy
+      keycloak:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/actuator/health/readiness"]
       interval: 10s
       timeout: 5s
       retries: 6
       start_period: 45s
+
+  keycloak-postgres:
+    image: postgres:16-alpine
+    networks:
+      - clausis-net
+    environment:
+      - POSTGRES_USER=keycloak
+      - POSTGRES_PASSWORD=keycloak
+      - POSTGRES_DB=keycloak_db
+    volumes:
+      - keycloak_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0
+    # start-dev (not start): this is local/dev infra like the rest of this
+    # compose file's dummy secrets — start's production hardening (HTTPS
+    # enforcement, hostname strictness) would just get in the way here.
+    # --import-realm loads docker/keycloak/realm-export.json on every boot;
+    # Keycloak skips re-importing a realm that already exists, so this is
+    # safe across container restarts against the same keycloak-postgres volume.
+    command: start-dev --import-realm
+    networks:
+      - clausis-net
+    environment:
+      - KEYCLOAK_ADMIN=admin
+      - KEYCLOAK_ADMIN_PASSWORD=admin
+      - KC_DB=postgres
+      - KC_DB_URL=jdbc:postgresql://keycloak-postgres:5432/keycloak_db
+      - KC_DB_USERNAME=keycloak
+      - KC_DB_PASSWORD=keycloak
+      - KC_HEALTH_ENABLED=true
+    volumes:
+      - ./docker/keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json
+    ports:
+      - "8081:8080"
+    depends_on:
+      keycloak-postgres:
+        condition: service_healthy
+    healthcheck:
+      # Verified against a real run: Keycloak 24 serves /health/ready on the
+      # same main port as everything else (no separate management port until
+      # later Keycloak versions) — no curl/wget binary in this image, hence bash's /dev/tcp.
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/8080 && echo -e 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && grep -q '\"status\": \"UP\"' <&3"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
 
   postgres:
     image: postgres:16-alpine
@@ -217,6 +278,7 @@ services:
 
 volumes:
   postgres_data:
+  keycloak_postgres_data:
   redis_data:
   kafka_data:
   prometheus_data:
