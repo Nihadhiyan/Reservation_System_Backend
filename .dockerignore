@@ -1,0 +1,16 @@
+target/
+.git/
+.gitignore
+.mvn/wrapper/maven-wrapper.jar
+*.iml
+.idea/
+.vscode/
+.settings/
+.classpath
+.project
+*.log
+.env
+.env.*
+docker-compose*.yml
+k8s/
+README.md

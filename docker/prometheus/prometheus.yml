@@ -1,0 +1,8 @@
+global:
+  scrape_interval: 10s
+
+scrape_configs:
+  - job_name: 'clausis-api'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['clausis-api:8080']
