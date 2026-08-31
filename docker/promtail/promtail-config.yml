@@ -2,49 +2,49 @@ server:
   http_listen_port: 9080
   grpc_listen_port: 0
 
-  positions:
-    filename: /tmp/positions.yaml
+positions:
+  filename: /tmp/positions.yaml
 
-  clients:
-    url: http://loki:3100/loki/api/v1/push
+clients:
+  - url: http://loki:3100/loki/api/v1/push
 
-  scrape_configs:
-    - job_name: docker
-      static_configs:
-        - targets:
-            - localhost
+scrape_configs:
+  - job_name: docker
+    static_configs:
+      - targets:
+          - localhost
 
-          labels:
-            job:  docker_logs
-            __path__: /var/lib/docker/containers/*/*log
+        labels:
+          job:  docker_logs
+          __path__: /var/lib/docker/containers/*/*log
 
-      pipeline_stages:
-        # Docker's json-file log driver wraps every line as
-        # {"log":"...\n","stream":"stdout|stderr","time":"..."}. Without this
-        # stage, Loki stores that raw JSON wrapper as the log line — the app's
-        # actual message becomes an unreadable escaped substring, and Grafana's
-        # Loki→Tempo derived field (see datasources.yml) has to regex-match
-        # against a garbled line instead of a clean one.
-        - docker: {}
+    pipeline_stages:
+      # Docker's json-file log driver wraps every line as
+      # {"log":"...\n","stream":"stdout|stderr","time":"..."}. Without this
+      # stage, Loki stores that raw JSON wrapper as the log line — the app's
+      # actual message becomes an unreadable escaped substring, and Grafana's
+      # Loki→Tempo derived field (see datasources.yml) has to regex-match
+      # against a garbled line instead of a clean one.
+      - docker: {}
 
-        # Promote the container's real emission time (not Promtail's ingestion
-        # time) as the Loki entry timestamp, so log ordering survives Promtail
-        # restarts/backpressure.
-        - timestamp:
-            source: time
-            format: RFC3339Nano
+      # Promote the container's real emission time (not Promtail's ingestion
+      # time) as the Loki entry timestamp, so log ordering survives Promtail
+      # restarts/backpressure.
+      - timestamp:
+          source: time
+          format: RFC3339Nano
 
-        # Extract traceId/spanId as Loki labels so the whole log stream for one
-        # request/trace can be filtered directly in Loki, not just clicked
-        # through one line at a time via the derived field in datasources.yml.
-        # NOTE — this is fine at local/dev log volume, but trace_id is
-        # unbounded-cardinality: labeling by it in a real production Loki
-        # deployment explodes the index (one stream per trace) and will hurt
-        # Loki's own performance/memory footprint. In production, drop this
-        # regex/labels pair and rely solely on the derivedFields query-time
-        # regex in datasources.yml instead, which costs nothing at ingest time.
-        - regex:
-            expression: '\[traceId=(?P<trace_id>\w*),spanId=(?P<span_id>\w*)\]'
-        - labels:
-            trace_id:
-            span_id:
+      # Extract traceId/spanId as Loki labels so the whole log stream for one
+      # request/trace can be filtered directly in Loki, not just clicked
+      # through one line at a time via the derived field in datasources.yml.
+      # NOTE — this is fine at local/dev log volume, but trace_id is
+      # unbounded-cardinality: labeling by it in a real production Loki
+      # deployment explodes the index (one stream per trace) and will hurt
+      # Loki's own performance/memory footprint. In production, drop this
+      # regex/labels pair and rely solely on the derivedFields query-time
+      # regex in datasources.yml instead, which costs nothing at ingest time.
+      - regex:
+          expression: '\[traceId=(?P<trace_id>\w*),spanId=(?P<span_id>\w*)\]'
+      - labels:
+          trace_id:
+          span_id:
