@@ -28,11 +28,12 @@ import lombok.RequiredArgsConstructor;
 @RestController
 @RequestMapping("/api/v1/layout-markers")
 @RequiredArgsConstructor
-@PreAuthorize("hasRole('SUPER_ADMIN')")
+@PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ORG_ADMIN', 'CUSTOMER')")
 public class LayoutMarkerController {
 
     private final LayoutMarkerService layoutMarkerService;
 
+    @PreAuthorize("hasRole('SUPER_ADMIN') or @orgAuth.isVenueOwnerAdminForNewLayoutMarker(authentication, #request.venueId(), #request.buildingId(), #request.hallId())")
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public ApiResponseDto<LayoutMarkerDto> createLayoutMarker(@Valid @RequestBody CreateLayoutMarkerRequest request) {
@@ -40,12 +41,14 @@ public class LayoutMarkerController {
         return new ApiResponseDto<>(true, "Layout marker created successfully", data, Instant.now());
     }
 
+    @PreAuthorize("hasRole('SUPER_ADMIN') or @orgAuth.isVenueOwnerAdminByLayoutMarker(authentication, #id)")
     @PutMapping("/{id}")
     public ApiResponseDto<LayoutMarkerDto> updateLayoutMarker(@PathVariable UUID id, @Valid @RequestBody UpdateLayoutMarkerRequest request) {
         LayoutMarkerDto data = layoutMarkerService.updateLayoutMarker(id, request);
         return new ApiResponseDto<>(true, "Layout marker updated successfully", data, Instant.now());
     }
 
+    @PreAuthorize("hasRole('SUPER_ADMIN') or @orgAuth.isVenueOwnerAdminByLayoutMarker(authentication, #id)")
     @DeleteMapping("/{id}")
     public ApiResponseDto<Void> deleteLayoutMarker(@PathVariable UUID id) {
         layoutMarkerService.deleteLayoutMarker(id);

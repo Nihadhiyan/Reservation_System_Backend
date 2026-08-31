@@ -7,8 +7,6 @@ import org.springframework.cache.annotation.Cacheable;
 import com.bookfair.backend.event.cache.EventUpdatedEvent;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -16,26 +14,28 @@ import com.bookfair.backend.dto.event.mapper.EventMapper;
 import com.bookfair.backend.dto.event.request.CreateEventRequest;
 import com.bookfair.backend.dto.event.request.UpdateEventRequest;
 import com.bookfair.backend.dto.event.response.EventResponse;
-import com.bookfair.backend.dto.event.response.EventStallResponse;
+
 import com.bookfair.backend.exception.BusinessException;
+import com.bookfair.backend.exception.DuplicateResourceException;
 import com.bookfair.backend.exception.ErrorCode;
 import com.bookfair.backend.exception.ForbiddenException;
 import com.bookfair.backend.exception.ResourceNotFoundException;
 import com.bookfair.backend.model.Event;
-import com.bookfair.backend.model.Event.EventStatus;
-import com.bookfair.backend.model.EventStall;
+import com.bookfair.backend.model.enums.EventStatus;
+import com.bookfair.backend.model.enums.AvailabilityStatus;
 import com.bookfair.backend.model.Organization;
 import com.bookfair.backend.model.User;
-import com.bookfair.backend.model.User.SystemRole;
-import com.bookfair.backend.model.OrganizationMember.OrganizationRole;
+import com.bookfair.backend.model.enums.SystemRole;
+import com.bookfair.backend.model.enums.OrganizationRole;
 import com.bookfair.backend.model.OrganizationMember;
 import com.bookfair.backend.model.Venue;
 import com.bookfair.backend.repository.EventRepository;
-import com.bookfair.backend.repository.EventStallRepository;
+import com.bookfair.backend.repository.EventSpaceBookingRepository;
 import com.bookfair.backend.repository.OrganizationRepository;
 import com.bookfair.backend.repository.UserRepository;
 import com.bookfair.backend.repository.OrganizationMemberRepository;
 import com.bookfair.backend.repository.VenueRepository;
+import com.bookfair.backend.util.SecurityUtils;
 import static java.util.Objects.requireNonNull;
 
 import lombok.RequiredArgsConstructor;
@@ -44,13 +44,14 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class EventService {
         private final EventRepository eventRepository;
-        private final EventStallRepository eventStallRepository;
+        private final EventSpaceBookingRepository bookingRepository;
         private final OrganizationRepository organizationRepository;
         private final VenueRepository venueRepository;
         private final UserRepository userRepository;
         private final OrganizationMemberRepository memberRepository;
         private final EventMapper eventMapper;
         private final org.springframework.context.ApplicationEventPublisher eventPublisher;
+        private final SecurityUtils securityUtils;
 
         // Cache upcoming events list to optimize high-traffic landing page requests
         @Cacheable(value = "events", key = "'upcoming'")
@@ -80,44 +81,35 @@ public class EventService {
                 return eventMapper.toEventResponse(event);
         }
 
-        @Transactional(readOnly = true)
-        public List<EventStallResponse> getStallsForEvent(UUID eventId) {
-                Event event = eventRepository.findByIdAndActiveTrue(requireNonNull(eventId))
-                                .orElseThrow(() -> new ResourceNotFoundException("Event not found",
-                                                ErrorCode.EVENT_NOT_FOUND));
 
-                return eventStallRepository.findByEvent(event).stream()
-                                .map(eventMapper::toEventStallResponse)
-                                .toList();
-        }
 
         @Transactional
         public EventResponse createEvent(CreateEventRequest request) {
                 requireNonNull(request, "request cannot be null");
-                Organization organizer = organizationRepository.findById(requireNonNull(request.getOrganizerId()))
+
+                if (eventRepository.existsByNameAndActiveTrue(requireNonNull(request.name()))) {
+                        throw new DuplicateResourceException(
+                                        "An event with this name already exists.",
+                                        ErrorCode.BUSINESS_RULE_VIOLATION);
+                }
+
+                Organization organizer = organizationRepository.findById(requireNonNull(request.organizerId()))
                                 .orElseThrow(() -> new ResourceNotFoundException("Organization not found",
                                                 ErrorCode.ORGANIZATION_NOT_FOUND));
 
-                Venue venue = venueRepository.findById(requireNonNull(request.getVenueId()))
+                Venue venue = venueRepository.findById(requireNonNull(request.venueId()))
                                 .orElseThrow(() -> new ResourceNotFoundException("Venue not found",
                                                 ErrorCode.VENUE_NOT_FOUND));
 
-                User requestingUser = userRepository.findById(requireNonNull(getCurrentUserId()))
+                User requestingUser = userRepository.findById(requireNonNull(securityUtils.getCurrentUserId()))
                                 .orElseThrow(() -> new ResourceNotFoundException("User not found",
                                                 ErrorCode.USER_NOT_FOUND));
 
-                if (requestingUser.getSystemRole() != SystemRole.SUPER_ADMIN) {
-                        OrganizationMember member = memberRepository
-                                        .findByUserIdAndOrganizationId(requestingUser.getId(), organizer.getId())
-                                        .orElse(null);
-                        if (member == null || member.getRole() != OrganizationRole.ORG_ADMIN) {
-                                throw new ForbiddenException("You cannot create an event for another organization.",
-                                                ErrorCode.FORBIDDEN);
-                        }
-                }
+                requireOrgAdmin(requestingUser, organizer.getId(),
+                                "You cannot create an event for another organization.");
 
-                List<Organization> partners = (request.getPartnerIds() != null && !request.getPartnerIds().isEmpty())
-                                ? organizationRepository.findAllById(requireNonNull(request.getPartnerIds()))
+                List<Organization> partners = (request.partnerIds() != null && !request.partnerIds().isEmpty())
+                                ? organizationRepository.findAllById(requireNonNull(request.partnerIds()))
                                 : List.of();
 
                 Event event = eventMapper.toEvent(request, organizer, venue, partners);
@@ -136,63 +128,48 @@ public class EventService {
                                 .orElseThrow(() -> new ResourceNotFoundException("Event not found",
                                                 ErrorCode.EVENT_NOT_FOUND));
 
-                Organization organizer = organizationRepository.findById(requireNonNull(request.getOrganizerId()))
+                Organization organizer = organizationRepository.findById(requireNonNull(request.organizerId()))
                                 .orElseThrow(() -> new ResourceNotFoundException("Organization not found",
                                                 ErrorCode.ORGANIZATION_NOT_FOUND));
 
-                Venue venue = venueRepository.findById(requireNonNull(request.getVenueId()))
+                Venue venue = venueRepository.findById(requireNonNull(request.venueId()))
                                 .orElseThrow(() -> new ResourceNotFoundException("Venue not found",
                                                 ErrorCode.VENUE_NOT_FOUND));
 
-                User requestingUser = userRepository.findById(requireNonNull(getCurrentUserId()))
+                User requestingUser = userRepository.findById(requireNonNull(securityUtils.getCurrentUserId()))
                                 .orElseThrow(() -> new ResourceNotFoundException("User not found",
                                                 ErrorCode.USER_NOT_FOUND));
 
-                if (requestingUser.getSystemRole() != SystemRole.SUPER_ADMIN) {
-                        OrganizationMember member = memberRepository
-                                        .findByUserIdAndOrganizationId(requestingUser.getId(),
-                                                        event.getOrganizer().getId())
-                                        .orElse(null);
-                        if (member == null || member.getRole() != OrganizationRole.ORG_ADMIN) {
-                                throw new ForbiddenException("You cannot modify an event outside your organization.",
-                                                ErrorCode.FORBIDDEN);
-                        }
-                        if (!event.getOrganizer().getId().equals(organizer.getId())) {
-                                OrganizationMember newOrgMember = memberRepository
-                                                .findByUserIdAndOrganizationId(requestingUser.getId(),
-                                                                organizer.getId())
-                                                .orElse(null);
-                                if (newOrgMember == null || newOrgMember.getRole() != OrganizationRole.ORG_ADMIN) {
-                                        throw new ForbiddenException(
-                                                        "You cannot transfer an event to another organization.",
-                                                        ErrorCode.FORBIDDEN);
-                                }
-                        }
+                requireOrgAdmin(requestingUser, event.getOrganizer().getId(),
+                                "You cannot modify an event outside your organization.");
+                if (!event.getOrganizer().getId().equals(organizer.getId())) {
+                        requireOrgAdmin(requestingUser, organizer.getId(),
+                                        "You cannot transfer an event to another organization.");
                 }
 
                 if (!event.getVenue().getId().equals(venue.getId())) {
-                        List<EventStall> esList = eventStallRepository.findByEventIdAndActiveTrue(event.getId());
-                        if (!esList.isEmpty()) {
+                        long count = bookingRepository.countByEventId(event.getId());
+                        if (count > 0) {
                                 throw new BusinessException("Cannot change Event Venue because stalls from the original Venue are currently assigned to this Event.",
                                                 ErrorCode.BUSINESS_RULE_VIOLATION);
                         }
                 }
 
                 boolean oldActive = Boolean.TRUE.equals(event.getActive());
-                if (request.getActive() != null && !request.getActive() && oldActive) {
+                if (request.active() != null && !request.active() && oldActive) {
                         validateNoActiveBookingsForEvent(event.getId(), event.getName());
                 }
 
-                List<Organization> partners = (request.getPartnerIds() != null && !request.getPartnerIds().isEmpty())
-                                ? organizationRepository.findAllById(requireNonNull(request.getPartnerIds()))
+                List<Organization> partners = (request.partnerIds() != null && !request.partnerIds().isEmpty())
+                                ? organizationRepository.findAllById(requireNonNull(request.partnerIds()))
                                 : List.of();
 
-                event.setName(request.getName());
-                event.setEventType(request.getEventType());
-                event.setStartDateTime(request.getStartDateTime());
-                event.setEndDateTime(request.getEndDateTime());
-                event.setStatus(request.getStatus());
-                event.setActive(request.getActive() != null ? request.getActive() : event.getActive());
+                event.setName(request.name());
+                event.setEventType(request.eventType());
+                event.setStartDateTime(request.startDateTime());
+                event.setEndDateTime(request.endDateTime());
+                event.setStatus(request.status());
+                event.setActive(request.active() != null ? request.active() : event.getActive());
                 event.setOrganizer(organizer);
                 event.setVenue(venue);
                 event.setPartners(partners);
@@ -214,20 +191,12 @@ public class EventService {
                                 .orElseThrow(() -> new ResourceNotFoundException("Event not found",
                                                 ErrorCode.EVENT_NOT_FOUND));
 
-                User requestingUser = userRepository.findById(requireNonNull(getCurrentUserId()))
+                User requestingUser = userRepository.findById(requireNonNull(securityUtils.getCurrentUserId()))
                                 .orElseThrow(() -> new ResourceNotFoundException("User not found",
                                                 ErrorCode.USER_NOT_FOUND));
 
-                if (requestingUser.getSystemRole() != SystemRole.SUPER_ADMIN) {
-                        OrganizationMember member = memberRepository
-                                        .findByUserIdAndOrganizationId(requestingUser.getId(),
-                                                        event.getOrganizer().getId())
-                                        .orElse(null);
-                        if (member == null || member.getRole() != OrganizationRole.ORG_ADMIN) {
-                                throw new ForbiddenException("You cannot delete an event outside your organization.",
-                                                ErrorCode.FORBIDDEN);
-                        }
-                }
+                requireOrgAdmin(requestingUser, event.getOrganizer().getId(),
+                                "You cannot delete an event outside your organization.");
 
                 validateNoActiveBookingsForEvent(event.getId(), event.getName());
 
@@ -240,12 +209,25 @@ public class EventService {
         }
 
         private void validateNoActiveBookingsForEvent(UUID eventId, String eventName) {
-                List<EventStall> esList = eventStallRepository.findByEventIdAndActiveTrue(eventId);
-                for (EventStall es : esList) {
-                        if (es.getStatus() == EventStall.AvailabilityStatus.BOOKED || es.getStatus() == EventStall.AvailabilityStatus.BLOCKED) {
-                                throw new BusinessException("Cannot deactivate Event " + eventName + " because stall " + es.getStall().getName() + " is currently booked or blocked.",
-                                                ErrorCode.BUSINESS_RULE_VIOLATION);
-                        }
+                // with EventSpaceBooking, if there's any active booking, we shouldn't deactivate
+                long count = bookingRepository.countByEventIdAndStatusIn(eventId,
+                                List.of(com.bookfair.backend.model.enums.BookingStatus.PENDING,
+                                                com.bookfair.backend.model.enums.BookingStatus.CONFIRMED));
+                if (count > 0) {
+                        throw new BusinessException("Cannot deactivate Event " + eventName + " because it is currently booked or blocked.",
+                                        ErrorCode.BUSINESS_RULE_VIOLATION);
+                }
+        }
+
+        // SUPER_ADMIN bypasses; otherwise the requesting user must be an ORG_ADMIN of organizationId.
+        private void requireOrgAdmin(User user, UUID organizationId, String forbiddenMessage) {
+                if (user.getSystemRole() == SystemRole.SUPER_ADMIN) {
+                        return;
+                }
+                OrganizationMember member = memberRepository.findByUserIdAndOrganizationId(user.getId(), organizationId)
+                                .orElse(null);
+                if (member == null || member.getRole() != OrganizationRole.ORG_ADMIN) {
+                        throw new ForbiddenException(forbiddenMessage, ErrorCode.FORBIDDEN);
                 }
         }
 
@@ -256,7 +238,7 @@ public class EventService {
                                                 ErrorCode.EVENT_NOT_FOUND));
 
                 String oldStatus = eventInstance.getStatus().name();
-                Event.EventStatus newStatus = Event.EventStatus.valueOf(newStatusString.toUpperCase());
+                EventStatus newStatus = EventStatus.valueOf(newStatusString.toUpperCase());
 
                 if (!oldStatus.equals(newStatus.name())) {
                         eventInstance.setStatus(newStatus);
@@ -269,19 +251,5 @@ public class EventService {
                         // Publish event to trigger AFTER_COMMIT cache eviction
                         eventPublisher.publishEvent(new EventUpdatedEvent(eventInstance.getId()));
                 }
-        }
-
-        private UUID getCurrentUserId() {
-                Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-
-                if (authentication != null && authentication.getPrincipal() instanceof UUID userId) {
-                        return userId;
-                }
-
-                if (authentication != null && authentication.getPrincipal() instanceof String userIdString) {
-                        return UUID.fromString(userIdString);
-                }
-
-                throw new BusinessException("Unable to resolve current user", ErrorCode.UNAUTHORIZED);
         }
 }

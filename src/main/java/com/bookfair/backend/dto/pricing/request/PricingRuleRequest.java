@@ -2,32 +2,24 @@ package com.bookfair.backend.dto.pricing.request;
 
 import java.math.BigDecimal;
 
-import com.bookfair.backend.model.PricingRule.ConditionType;
+import com.bookfair.backend.model.enums.ConditionType;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
 
-@Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
-public class PricingRuleRequest {
+public record PricingRuleRequest(
     @NotBlank
-    private String name;
+    String name,
 
     @NotBlank
-    private String description;
+    String description,
 
     @NotBlank
-    private ConditionType conditionType;
+    ConditionType conditionType,
 
     @NotBlank
-    private String conditionValue;
+    String conditionValue,
 
     @NotNull
-    private BigDecimal multiplier;
-}
+    BigDecimal multiplier
+) {}

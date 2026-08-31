@@ -13,7 +13,6 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.bookfair.backend.dto.common.ApiResponseDto;
@@ -29,39 +28,40 @@ import lombok.RequiredArgsConstructor;
 @RestController
 @RequestMapping("/api/v1/floors")
 @RequiredArgsConstructor
-@PreAuthorize("hasRole('SUPER_ADMIN')")
 public class FloorController {
 
     private final FloorService floorService;
 
+    @PreAuthorize("hasRole('SUPER_ADMIN') or @orgAuth.isVenueOwnerAdminByBuilding(authentication, #request.buildingId())")
     @PostMapping
-    @ResponseStatus(HttpStatus.CREATED)
-    public ApiResponseDto<FloorResponse> createFloor(@Valid @RequestBody CreateFloorRequest request) {
+    public org.springframework.http.ResponseEntity<ApiResponseDto<FloorResponse>> createFloor(@Valid @RequestBody CreateFloorRequest request) {
         FloorResponse data = floorService.createFloor(request);
-        return new ApiResponseDto<>(true, "Floor created successfully", data, Instant.now());
+        return org.springframework.http.ResponseEntity.status(HttpStatus.CREATED).body(new ApiResponseDto<>(true, "Floor created successfully", data, Instant.now()));
     }
 
     @GetMapping("/{id}")
-    public ApiResponseDto<FloorResponse> getFloorById(@PathVariable UUID id) {
+    public org.springframework.http.ResponseEntity<ApiResponseDto<FloorResponse>> getFloorById(@PathVariable UUID id) {
         FloorResponse data = floorService.getFloorById(id);
-        return new ApiResponseDto<>(true, "Floor fetched successfully", data, Instant.now());
+        return org.springframework.http.ResponseEntity.ok(new ApiResponseDto<>(true, "Floor fetched successfully", data, Instant.now()));
     }
 
+    @PreAuthorize("hasRole('SUPER_ADMIN') or @orgAuth.isVenueOwnerAdminByFloor(authentication, #id)")
     @PutMapping("/{id}")
-    public ApiResponseDto<FloorResponse> updateFloor(@PathVariable UUID id, @Valid @RequestBody UpdateFloorRequest request) {
+    public org.springframework.http.ResponseEntity<ApiResponseDto<FloorResponse>> updateFloor(@PathVariable UUID id, @Valid @RequestBody UpdateFloorRequest request) {
         FloorResponse data = floorService.updateFloor(id, request);
-        return new ApiResponseDto<>(true, "Floor updated successfully", data, Instant.now());
+        return org.springframework.http.ResponseEntity.ok(new ApiResponseDto<>(true, "Floor updated successfully", data, Instant.now()));
     }
 
+    @PreAuthorize("hasRole('SUPER_ADMIN') or @orgAuth.isVenueOwnerAdminByFloor(authentication, #id)")
     @DeleteMapping("/{id}")
-    public ApiResponseDto<Void> deleteFloor(@PathVariable UUID id) {
+    public org.springframework.http.ResponseEntity<ApiResponseDto<Void>> deleteFloor(@PathVariable UUID id) {
         floorService.deleteFloor(id);
-        return new ApiResponseDto<>(true, "Floor deleted successfully", null, Instant.now());
+        return org.springframework.http.ResponseEntity.ok(new ApiResponseDto<>(true, "Floor deactivated successfully", null, Instant.now()));
     }
 
     @GetMapping("/{id}/halls")
-    public ApiResponseDto<List<HallResponse>> getHallsByFloor(@PathVariable UUID id) {
+    public org.springframework.http.ResponseEntity<ApiResponseDto<List<HallResponse>>> getHallsByFloor(@PathVariable UUID id) {
         List<HallResponse> data = floorService.getHallsByFloor(id);
-        return new ApiResponseDto<>(true, "Halls fetched successfully", data, Instant.now());
+        return org.springframework.http.ResponseEntity.ok(new ApiResponseDto<>(true, "Halls fetched successfully", data, Instant.now()));
     }
 }

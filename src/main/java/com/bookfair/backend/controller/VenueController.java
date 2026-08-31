@@ -24,6 +24,7 @@ import com.bookfair.backend.dto.venue.request.CreateVenueRequest;
 import com.bookfair.backend.dto.venue.request.UpdateVenueRequest;
 import com.bookfair.backend.dto.venue.response.VenueMapResponse;
 import com.bookfair.backend.dto.venue.response.VenueResponse;
+import com.bookfair.backend.dto.common.LayoutMarkerDto;
 import com.bookfair.backend.service.VenueService;
 
 import jakarta.validation.Valid;
@@ -36,7 +37,7 @@ public class VenueController {
 
     private final VenueService venueService;
 
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasRole('SUPER_ADMIN') or @orgAuth.isVenueOwnerAdmin(authentication, #request.ownerOrganizationId())")
     @PostMapping
     public ResponseEntity<ApiResponseDto<VenueResponse>> createVenue(@RequestBody @Valid CreateVenueRequest request) {
         VenueResponse response = venueService.createVenue(request);
@@ -66,6 +67,7 @@ public class VenueController {
                 .ok(new ApiResponseDto<>(true, "Venue map retrieved successfully", response, Instant.now()));
     }
 
+    @PreAuthorize("@orgAuth.isVenueOwnerAdminByVenue(authentication, #id)")
     @PutMapping("/{id}")
     public ResponseEntity<ApiResponseDto<VenueResponse>> updateVenue(@PathVariable UUID id,
             @Valid @RequestBody UpdateVenueRequest request) {
@@ -74,10 +76,11 @@ public class VenueController {
                 .ok(new ApiResponseDto<>(true, "Venue updated successfully", response, Instant.now()));
     }
 
+    @PreAuthorize("@orgAuth.isVenueOwnerAdminByVenue(authentication, #id)")
     @DeleteMapping("/{id}")
     public ResponseEntity<ApiResponseDto<Void>> deleteVenue(@PathVariable UUID id) {
         venueService.deleteVenue(id);
-        return ResponseEntity.ok(new ApiResponseDto<>(true, "Venue deleted successfully", null, Instant.now()));
+        return ResponseEntity.ok(new ApiResponseDto<>(true, "Venue deactivated successfully", null, Instant.now()));
     }
 
     @GetMapping("/{venueId}/buildings")
@@ -88,8 +91,8 @@ public class VenueController {
     }
 
     @GetMapping("/{venueId}/markers")
-    public ResponseEntity<ApiResponseDto<Object>> getVenueMarkers(@PathVariable UUID venueId) {
-        Object response = venueService.getMarkersByVenue(venueId);
+    public ResponseEntity<ApiResponseDto<List<LayoutMarkerDto>>> getVenueMarkers(@PathVariable UUID venueId) {
+        List<LayoutMarkerDto> response = venueService.getMarkersByVenue(venueId);
         return ResponseEntity
                 .ok(new ApiResponseDto<>(true, "Markers retrieved successfully", response, Instant.now()));
     }

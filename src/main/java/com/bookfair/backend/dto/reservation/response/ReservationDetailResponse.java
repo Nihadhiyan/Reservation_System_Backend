@@ -9,28 +9,19 @@ import java.util.UUID;
 
 import com.bookfair.backend.dto.common.SimpleEventDto;
 import com.bookfair.backend.dto.common.SimpleUserDto;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
-
-@Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
-public class ReservationDetailResponse {
-    private UUID id;
-    private SimpleUserDto user;
-    private SimpleEventDto event;
-    private LocalDate date;
-    private Instant reservationStartDateTime;
-    private Instant expiresAt;
-    private LocalTime time;
-    private String status;
-    private BigDecimal totalAmount;
-    private List<ReservationStallResponse> stalls;
-    private UUID organizationId;
-    private String organizationName;
-    private UUID reservationCreatedByUserId;
-    private String reservationCreatedByUsername;
-}
+public record ReservationDetailResponse(
+    UUID id,
+    SimpleUserDto user,
+    SimpleEventDto event,
+    LocalDate date,
+    Instant reservationStartDateTime,
+    Instant expiresAt,
+    LocalTime time,
+    String status,
+    BigDecimal totalAmount,
+    List<ReservationStallResponse> stalls,
+    UUID organizationId,
+    String organizationName,
+    UUID reservationCreatedByUserId,
+    String reservationCreatedByUsername
+) {}

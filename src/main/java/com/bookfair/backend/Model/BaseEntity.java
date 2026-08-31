@@ -1,6 +1,5 @@
 package com.bookfair.backend.model;
 
-import java.io.Serializable;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -12,20 +11,30 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.EntityListeners;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
 import jakarta.persistence.MappedSuperclass;
 import jakarta.persistence.Version;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 import lombok.Setter;
+import lombok.ToString;
 
-// Implements Serializable so all extending JPA entities can be cleanly serialized to Redis
 @MappedSuperclass
 @EntityListeners(AuditingEntityListener.class)
+@ToString
 @Getter
 @Setter
-public abstract class BaseEntity implements Serializable {
+@NoArgsConstructor
+public abstract class BaseEntity {
 
     @Version
     private Long version;
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private UUID id;
 
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false, columnDefinition = "TIMESTAMP WITH TIME ZONE")

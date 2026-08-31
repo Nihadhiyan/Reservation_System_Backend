@@ -1,8 +1,9 @@
 package com.bookfair.backend.model;
 
 import jakarta.persistence.*;
-import jakarta.validation.constraints.Positive;
-import lombok.AllArgsConstructor;
+import com.bookfair.backend.model.enums.ReservationStatus;
+import jakarta.validation.constraints.AssertTrue;
+import jakarta.validation.constraints.PositiveOrZero;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -12,7 +13,6 @@ import lombok.ToString;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
-import java.util.UUID;
 
 @Entity
 @Table(name = "reservations", indexes = {
@@ -23,14 +23,11 @@ import java.util.UUID;
 })
 @Setter
 @Getter
+@ToString
 @NoArgsConstructor
-@AllArgsConstructor
 public class Reservation extends BaseEntity {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    private UUID id;
-
+    // employee from that organization who is managing the booth
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
     @ToString.Exclude
@@ -44,12 +41,6 @@ public class Reservation extends BaseEntity {
     private Organization organization;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "reservation_created_by", nullable = false)
-    @ToString.Exclude
-    @EqualsAndHashCode.Exclude
-    private User reservationCreatedBy;
-
-    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "event_id", nullable = false)
     @ToString.Exclude
     @EqualsAndHashCode.Exclude
@@ -58,7 +49,7 @@ public class Reservation extends BaseEntity {
     @OneToMany(mappedBy = "reservation", cascade = CascadeType.ALL, orphanRemoval = true)
     @ToString.Exclude
     @EqualsAndHashCode.Exclude
-    private List<ReservationStall> reservedStalls;
+    private List<EventSpaceBooking> spaceBookings;
 
     @Column(name = "reservation_start_time", nullable = false, columnDefinition = "TIMESTAMP WITH TIME ZONE")
     private Instant reservationStartDateTime;
@@ -77,13 +68,14 @@ public class Reservation extends BaseEntity {
     private Genre genre;
 
     @Column(name = "total_price", nullable = false, precision = 10, scale = 2)
-    @Positive(message = "Total price must be positive")
+    @PositiveOrZero(message = "Total price must be non-negative")
     private BigDecimal totalPrice;
 
     @Column(name = "qr_code_payload", columnDefinition = "TEXT")
     private String qrCodePayload; // Stores the JWT String for the scanner app
 
-    public enum ReservationStatus {
-        PENDING, CONFIRMED, EXPIRED, CANCELLED, REJECTED, REFUNDED, REFUND_PENDING
+    @AssertTrue(message = "Expires at must be after start time")
+    public boolean isValidReservationTimeRange() {
+        return reservationStartDateTime == null || expiresAt == null || expiresAt.isAfter(reservationStartDateTime);
     }
 }

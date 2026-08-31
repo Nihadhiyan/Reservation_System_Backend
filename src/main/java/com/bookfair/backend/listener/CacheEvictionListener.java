@@ -1,6 +1,8 @@
 package com.bookfair.backend.listener;
 
 import static java.util.Objects.*;
+import java.util.UUID;
+
 
 import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
@@ -12,15 +14,22 @@ import org.springframework.transaction.event.TransactionalEventListener;
 import com.bookfair.backend.event.cache.GenreUpdatedEvent;
 import com.bookfair.backend.event.cache.HallUpdatedEvent;
 import com.bookfair.backend.event.cache.PricingRuleUpdatedEvent;
+import com.bookfair.backend.event.cache.VenueCreatedEvent;
 import com.bookfair.backend.event.cache.VenueUpdatedEvent;
+import com.bookfair.backend.event.organization.OrganizationCreatedEvent;
+import com.bookfair.backend.event.organization.OrganizationDeactivatedEvent;
+import com.bookfair.backend.event.organization.UserJoinedOrganizationEvent;
 import com.bookfair.backend.event.cache.OrganizationUpdatedEvent;
 import com.bookfair.backend.event.cache.EventUpdatedEvent;
 import com.bookfair.backend.event.user.UserUpdatedEvent;
-import com.bookfair.backend.event.cache.EventStallUpdatedEvent;
+import com.bookfair.backend.repository.EventRepository;
+import com.bookfair.backend.repository.OrganizationMemberRepository;
 import com.bookfair.backend.event.cache.LayoutUpdatedEvent;
 import com.bookfair.backend.event.hierarchy.VenueDeactivatedEvent;
 import com.bookfair.backend.event.stall.StallCreatedEvent;
+import com.bookfair.backend.event.stall.StallDeactivatedEvent;
 import com.bookfair.backend.event.stall.StallStatusChangedEvent;
+import com.bookfair.backend.event.user.UserDeletedEvent;
 
 import org.springframework.lang.NonNull;
 
@@ -33,6 +42,8 @@ import lombok.extern.slf4j.Slf4j;
 public class CacheEvictionListener {
 
     private final CacheManager cacheManager;
+    private final EventRepository eventRepository;
+    private final OrganizationMemberRepository memberRepository;
 
     @Async
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
@@ -40,6 +51,14 @@ public class CacheEvictionListener {
         log.info("Evicting pricing rule cache after commit for rule ID: {}", event.ruleId());
         evictCache("pricingRules");
         evictCache("activeRules");
+    }
+
+    @Async
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void onVenueCreated(VenueCreatedEvent event) {
+        log.info("Evicting venue cache after commit for newly created venue ID: {}", event.venueId());
+        evictCache("venues");
+        evictCache("venueMap");
     }
 
     @Async
@@ -78,12 +97,40 @@ public class CacheEvictionListener {
 
     @Async
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void onOrganizationCreated(OrganizationCreatedEvent event) {
+        log.info("Evicting organizationList cache after commit for created organization ID: {}", event.organizationId());
+        evictCache("organizationList");
+    }
+
+    @Async
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onOrganizationUpdated(OrganizationUpdatedEvent event) {
-        log.info("Evicting organizations, events, and userProfiles cache after commit for organization ID: {}",
+        log.info("Evicting organization, organizationList, events, and userProfiles cache after commit for organization ID: {}",
                 event.organizationId());
-        evictCache("organizations");
-        evictCache("events");
-        evictCache("userProfiles");
+        evictForOrganization(event.organizationId());
+    }
+
+    @Async
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void onOrganizationDeactivated(OrganizationDeactivatedEvent event) {
+        log.info("Evicting organization, organizationList, events, and userProfiles cache after deactivation commit for organization ID: {}",
+                event.organizationId());
+        evictForOrganization(event.organizationId());
+    }
+
+    private void evictForOrganization(UUID organizationId) {
+        eventRepository.findAllByOrganizerIdAndActiveTrue(organizationId).forEach((orgEvent) -> {
+            evictCacheEntry("events", requireNonNull(orgEvent.getId(), "Event ID cannot be null"));
+        });
+
+        memberRepository.findAllByOrganizationIdAndActiveTrue(organizationId).forEach((member) -> {
+            UUID memberUserId = requireNonNull(member.getUser().getId(), "User ID cannot be null");
+            evictCacheEntry("userProfiles", memberUserId);
+            evictCacheEntry("userOrganizations", memberUserId);
+        });
+
+        evictCacheEntry("organization", requireNonNull(organizationId, "Organization ID cannot be null"));
+        evictCache("organizationList");
     }
 
     @Async
@@ -99,15 +146,10 @@ public class CacheEvictionListener {
     public void onUserUpdated(UserUpdatedEvent event) {
         log.info("Evicting userProfiles cache after commit for user ID: {} / username: {}", event.userId(),
                 event.username());
-        evictCache("userProfiles");
+        evictCacheEntry("userProfiles", requireNonNull(event.userId()));
     }
 
-    @Async
-    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-    public void onEventStallUpdated(EventStallUpdatedEvent event) {
-        log.info("Evicting eventStalls cache after commit for event ID: {}", event.eventId());
-        evictCache("eventStalls");
-    }
+
 
     @Async
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
@@ -128,6 +170,28 @@ public class CacheEvictionListener {
     public void onStallStatusChanged(StallStatusChangedEvent event) {
         log.info("Evicting hallLayout cache after commit for status change on stall ID: {}", event.stallId());
         evictCache("hallLayout");
+    }
+
+    @Async
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void onStallDeactivated(StallDeactivatedEvent event) {
+        log.info("Evicting hallLayout cache after commit for deactivated stall ID: {}", event.stallId());
+        evictCache("hallLayout");
+    }
+
+    @Async
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void onUserDeleted(UserDeletedEvent event) {
+        log.info("Evicting userProfiles cache after commit for deleted user ID: {}", event.userId());
+        evictCacheEntry("userProfiles", requireNonNull(event.userId()));
+    }
+
+    @Async
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void onUserJoinedOrganization(UserJoinedOrganizationEvent event) {
+        log.info("Evicting userOrganizations cache after commit for user ID: {}", event.userId());
+        evictCacheEntry("userOrganizations", event.userId());
+        evictCache("organizations");
     }
 
     private void evictCache(@NonNull String cacheName) {

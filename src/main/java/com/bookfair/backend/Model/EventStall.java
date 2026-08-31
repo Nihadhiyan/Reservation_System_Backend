@@ -1,96 +1,105 @@
 package com.bookfair.backend.model;
 
+import com.bookfair.backend.model.enums.AvailabilityStatus;
+import jakarta.persistence.*;
+import lombok.*;
+
 import java.math.BigDecimal;
 import java.util.UUID;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
-import jakarta.persistence.FetchType;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.Index;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
-import jakarta.persistence.Table;
-import jakarta.persistence.UniqueConstraint;
-import jakarta.persistence.Embedded;
-import jakarta.persistence.AttributeOverrides;
-import jakarta.persistence.AttributeOverride;
-import jakarta.validation.constraints.Positive;
-import lombok.AllArgsConstructor;
-import lombok.EqualsAndHashCode;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
-import lombok.ToString;
-
 @Entity
-@Table(name = "event_stalls", indexes = {
-        @Index(name = "idx_es_event", columnList = "event_id"),
-        @Index(name = "idx_es_stall", columnList = "stall_id"),
-        @Index(name = "idx_es_status", columnList = "status")
-}, uniqueConstraints = {
-        @UniqueConstraint(columnNames = { "event_id", "stall_id" }, name = "uk_event_stall")
-})
-@Getter
-@Setter
-@AllArgsConstructor
+@Table(name = "event_stalls",
+    uniqueConstraints = {
+        @UniqueConstraint(
+            name = "uk_event_stall_event_stall",
+            columnNames = {"event_id", "stall_id"})
+    },
+    indexes = {
+        @Index(name = "idx_event_stall_event_id", columnList = "event_id"),
+        @Index(name = "idx_event_stall_stall_id", columnList = "stall_id"),
+        @Index(name = "idx_event_stall_status", columnList = "availability_status")
+    })
+@Data
+@Builder
 @NoArgsConstructor
+@AllArgsConstructor
 public class EventStall extends BaseEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
+    @Column(name = "id", nullable = false, updatable = false)
     private UUID id;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    // Which event this stall configuration belongs to
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "event_id", nullable = false)
     @ToString.Exclude
     @EqualsAndHashCode.Exclude
     private Event event;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    // The physical stall from the venue owner's permanent layout
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "stall_id", nullable = false)
     @ToString.Exclude
     @EqualsAndHashCode.Exclude
     private Stall stall;
 
-    @Column(name = "stall_name_at_creation")
-    private String stallNameAtCreation;
+    // Whether the organizer has included this stall in their event
+    // false = organizer disabled this stall (e.g. used space for a stage)
+    // This does NOT affect the venue owner's permanent layout
+    @Column(name = "active_for_event", nullable = false)
+    @Builder.Default
+    private Boolean activeForEvent = true;
 
-    @Column(name = "hall_id_snapshot")
-    private UUID hallIdSnapshot;
+    // Vendor booking status for this stall within this event
+    @Enumerated(EnumType.STRING)
+    @Column(name = "availability_status", nullable = false)
+    @Builder.Default
+    private AvailabilityStatus availabilityStatus = AvailabilityStatus.AVAILABLE;
 
-    @Column(name = "hall_name_at_creation")
-    private String hallNameAtCreation;
-
+    // Custom position set by the organizer for this event only
+    // null = use the stall's original position from Stall.layout
+    // The venue owner's original layout is never modified
     @Embedded
     @AttributeOverrides({
-            @AttributeOverride(name = "xCoord", column = @Column(name = "event_stall_x_coord")),
-            @AttributeOverride(name = "yCoord", column = @Column(name = "event_stall_y_coord")),
-            @AttributeOverride(name = "width", column = @Column(name = "event_stall_width")),
-            @AttributeOverride(name = "height", column = @Column(name = "event_stall_height"))
+        @AttributeOverride(name = "xCoord",
+            column = @Column(name = "custom_x")),
+        @AttributeOverride(name = "yCoord",
+            column = @Column(name = "custom_y")),
+        @AttributeOverride(name = "width",
+            column = @Column(name = "custom_width")),
+        @AttributeOverride(name = "height",
+            column = @Column(name = "custom_height"))
     })
-    private LayoutPosition layout;
+    private LayoutPosition customLayout;
 
-    @Column(nullable = false, precision = 10, scale = 2)
-    @Positive(message = "Base price must be positive")
-    private BigDecimal basePrice;
+    // Custom name for this stall in this event only
+    // e.g. venue calls it "S-101" but organizer labels it "Booth 1"
+    // null = use original stall name
+    @Column(name = "custom_name")
+    private String customName;
 
-    @Column(precision = 10, scale = 2)
-    @Positive(message = "Manual override price must be positive")
-    private BigDecimal manualOverridePrice;
+    // Price override for this stall in this event
+    // null = fall through to PricingService fallback chain
+    @Column(name = "event_price", precision = 10, scale = 2)
+    private BigDecimal eventPrice;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
-    private AvailabilityStatus status;
+    // Returns the effective layout — custom if organizer set one,
+    // original stall layout otherwise
+    @Transient
+    public LayoutPosition getEffectiveLayout() {
+        return customLayout != null ? customLayout : stall.getLayout();
+    }
 
-    @Column(name = "active", nullable = false)
-    private Boolean active = true;
+    // Returns the effective display name
+    @Transient
+    public String getEffectiveName() {
+        return customName != null ? customName : stall.getName();
+    }
 
-    public enum AvailabilityStatus {
-        AVAILABLE, BOOKED, BLOCKED
+    // Returns the effective price — event override or null (caller uses PricingService)
+    @Transient
+    public BigDecimal getEffectivePrice() {
+        return eventPrice;
     }
 }

@@ -1,18 +1,21 @@
 package com.bookfair.backend.model;
 
 import jakarta.persistence.*;
+
+import java.math.BigDecimal;
+
+import com.bookfair.backend.model.enums.StallType;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
-import lombok.AllArgsConstructor;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.ToString;
 
-import java.util.UUID;
 
-// Implements Serializable explicitly for Redis caching compatibility
 @Entity
 @Table(name = "stalls", indexes = {
         @Index(name = "idx_stall_hall", columnList = "hall_id")
@@ -21,13 +24,9 @@ import java.util.UUID;
 })
 @Setter
 @Getter
+@ToString
 @NoArgsConstructor
-@AllArgsConstructor
 public class Stall extends BaseEntity {
-
-    @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    private UUID id;
 
     @Column(nullable = false)
     @NotBlank(message = "Stall name is required")
@@ -50,20 +49,17 @@ public class Stall extends BaseEntity {
             @AttributeOverride(name = "width", column = @Column(name = "stall_width")),
             @AttributeOverride(name = "height", column = @Column(name = "stall_height"))
     })
+    @Valid
     private LayoutPosition layout;
 
-    @Column(name = "square_footage")
+    @Column(name = "square_footage", nullable = false)
     @Min(value = 0, message = "Square footage must be non-negative")
     private Double squareFootage;
 
     @Column(name = "active", nullable = false)
     private Boolean active = true;
 
-    public enum StallType {
-        STANDARD,
-        CORNER,
-        ISLAND,
-        SPONSOR,
-        PREMIUM
-    }
+    @Column(name = "daily_rate", precision = 10, scale = 2)
+    @DecimalMin(value = "0.0", inclusive = true, message = "Daily rate must be non-negative")
+    private BigDecimal dailyRate;
 }

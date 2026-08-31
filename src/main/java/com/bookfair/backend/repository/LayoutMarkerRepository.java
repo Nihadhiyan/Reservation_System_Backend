@@ -7,7 +7,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
 import com.bookfair.backend.model.LayoutMarker;
-import com.bookfair.backend.model.LayoutMarker.FeatureType;
+import com.bookfair.backend.model.enums.FeatureType;
 
 @Repository
 public interface LayoutMarkerRepository extends JpaRepository<LayoutMarker, UUID> {

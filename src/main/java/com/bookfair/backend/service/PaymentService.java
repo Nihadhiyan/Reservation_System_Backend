@@ -18,8 +18,11 @@ import com.bookfair.backend.integration.payment.PaymentGateway;
 import com.bookfair.backend.integration.payment.PaymentGateway.PaymentWebhookResult;
 import com.bookfair.backend.model.Payment;
 import com.bookfair.backend.model.Reservation;
+import com.bookfair.backend.model.enums.PaymentStatus;
 import com.bookfair.backend.repository.PaymentRepository;
 import com.bookfair.backend.repository.ReservationRepository;
+import com.bookfair.backend.producer.PaymentEventProducer;
+import org.springframework.beans.factory.annotation.Value;
 import static java.util.Objects.requireNonNull;
 
 import lombok.RequiredArgsConstructor;
@@ -36,18 +39,29 @@ public class PaymentService {
     private final PaymentMapper paymentMapper;
     private final List<PaymentGateway> paymentGateways;
     private final ApplicationEventPublisher eventPublisher;
+    private final PaymentEventProducer paymentEventProducer;
+
+    @Value("${clausis.features.kafka-enabled:true}")
+    private boolean isKafkaEnabled;
 
     @Transactional
     public PaymentResponse initializePayment(CreatePaymentRequest request, String gatewayType) {
         requireNonNull(request, "request cannot be null");
-        Reservation reservation = reservationRepository.findById(requireNonNull(request.getReservationId()))
+        Reservation reservation = reservationRepository.findById(requireNonNull(request.reservationId()))
                 .orElseThrow(
                         () -> new ResourceNotFoundException("Reservation not found", ErrorCode.RESERVATION_NOT_FOUND));
 
-        java.math.BigDecimal calculatedTotal = pricingEngineService.calculateTotalForReservation(reservation);
-        if (request.getAmount().compareTo(calculatedTotal) != 0) {
+        if (reservation.getStatus() != com.bookfair.backend.model.enums.ReservationStatus.PENDING) {
             throw new BusinessException(
-                    "Price mismatch: requested " + request.getAmount() + " but calculated " + calculatedTotal,
+                    "Cannot initialize payment for a reservation that is " + reservation.getStatus()
+                            + " — only PENDING reservations can be paid for.",
+                    ErrorCode.BUSINESS_RULE_VIOLATION);
+        }
+
+        java.math.BigDecimal calculatedTotal = reservation.getTotalPrice();
+        if (request.amount().compareTo(calculatedTotal) != 0) {
+            throw new BusinessException(
+                    "Price mismatch: requested " + request.amount() + " but calculated " + calculatedTotal,
                     ErrorCode.PRICE_MISMATCH);
         }
 
@@ -59,7 +73,8 @@ public class PaymentService {
 
         PaymentResponse response = adapter.initializePayment(request);
 
-        Payment payment = paymentMapper.toPayment(reservation, request.getAmount(), response.getTransactionId());
+        Payment payment = paymentMapper.toPayment(reservation, request.amount(), response.transactionId(),
+                com.bookfair.backend.model.enums.CurrencyCode.USD, gatewayType);
 
         Payment saved = paymentRepository.save(requireNonNull(payment));
         log.info("Initialized payment for reservation {} via {}", reservation.getId(), gatewayType);
@@ -82,40 +97,49 @@ public class PaymentService {
             return;
         }
 
-        Payment payment = paymentRepository.findByTransactionId(requireNonNull(result.transactionId()))
+        Payment payment = paymentRepository.findByTransactionIdForUpdate(requireNonNull(result.transactionId()))
                 .orElseGet(() -> {
                     // Fallback to searching by reservationId if transaction ID wasn't saved yet
                     Reservation reservation = reservationRepository.findById(requireNonNull(result.reservationId()))
                             .orElseThrow(() -> new ResourceNotFoundException("Reservation not found",
                                     ErrorCode.RESERVATION_NOT_FOUND));
 
-                    return paymentMapper.toWebhookPayment(reservation, result.transactionId(), result.amount());
+                    return paymentMapper.toWebhookPayment(reservation, result.transactionId(), result.amount(),
+                            com.bookfair.backend.model.enums.CurrencyCode.USD, gatewayType);
                 });
 
-        if (payment.getStatus() == Payment.PaymentStatus.COMPLETED) {
+        if (payment.getStatus() == PaymentStatus.COMPLETED) {
             log.info("Idempotency Check: Payment {} is already COMPLETED. Ignoring webhook.", payment.getId());
             return;
         }
 
-        Payment.PaymentStatus status = Payment.PaymentStatus.valueOf(result.paymentStatus().toUpperCase());
+        PaymentStatus status = PaymentStatus.valueOf(result.paymentStatus().toUpperCase());
         payment.setStatus(status);
 
         Payment saved = paymentRepository.save(payment);
         log.info("Processed webhook for payment {}", saved.getId());
 
-        if (status == Payment.PaymentStatus.COMPLETED) {
-            eventPublisher.publishEvent(new PaymentCompletedEvent(
+        if (status == PaymentStatus.COMPLETED) {
+            PaymentCompletedEvent paymentCompletedEvent = new PaymentCompletedEvent(
                     requireNonNull(payment.getReservation().getId()),
                     requireNonNull(saved.getTransactionId()),
-                    requireNonNull(saved.getAmount())));
+                    requireNonNull(saved.getAmount()));
+                    
+            if (isKafkaEnabled) {
+                log.info("Kafka is enabled, emitting PaymentCompletedEvent via Kafka Producer");
+                paymentEventProducer.publishPaymentCompletedEvent(paymentCompletedEvent);
+            } else {
+                log.info("Kafka is disabled, emitting PaymentCompletedEvent via Spring EventPublisher");
+                eventPublisher.publishEvent(paymentCompletedEvent);
+            }
         }
     }
 
     @Transactional(readOnly = true)
-    public PaymentResponse getPaymentStatus(UUID transactionId) {
-        Payment payment = paymentRepository.findById(requireNonNull(transactionId))
+    public PaymentResponse getPaymentStatus(UUID paymentId) {
+        Payment payment = paymentRepository.findById(requireNonNull(paymentId))
                 .orElseThrow(
-                        () -> new ResourceNotFoundException("Payment not found", ErrorCode.BUSINESS_RULE_VIOLATION));
+                        () -> new ResourceNotFoundException("Payment not found", ErrorCode.PAYMENT_NOT_FOUND));
 
         return paymentMapper.toPaymentResponse(payment);
     }

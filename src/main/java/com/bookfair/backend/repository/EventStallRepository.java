@@ -27,6 +27,18 @@ public interface EventStallRepository extends JpaRepository<EventStall, UUID> {
         @Param("eventId") UUID eventId,
         @Param("stallId") UUID stallId);
 
+    // Bulk lookup — avoids one query per stall when releasing/cancelling a
+    // Venue/Building/Floor/Hall-level booking that can span many stalls.
+    @Query("""
+        SELECT es FROM EventStall es
+        JOIN FETCH es.stall s
+        WHERE es.event.id = :eventId
+        AND s.id IN :stallIds
+        """)
+    List<EventStall> findByEventIdAndStallIdIn(
+        @Param("eventId") UUID eventId,
+        @Param("stallIds") List<UUID> stallIds);
+
     // All active stalls for an event — what vendors see when browsing
     @Query("""
         SELECT es FROM EventStall es
@@ -94,6 +106,15 @@ public interface EventStallRepository extends JpaRepository<EventStall, UUID> {
 
     // Check if stall already has an event stall for this event
     boolean existsByEventIdAndStallId(UUID eventId, UUID stallId);
+
+    // Bulk existence check — avoids one query per stall when generating EventStall
+    // records for a whole booking (e.g. a Venue/Building/Hall-level booking).
+    @Query("SELECT es.stall.id FROM EventStall es WHERE es.event.id = :eventId AND es.stall.id IN :stallIds")
+    List<UUID> findExistingStallIds(@Param("eventId") UUID eventId, @Param("stallIds") List<UUID> stallIds);
+
+    // Used when reactivating a Hall: a stall with a genuine BOOKED/BLOCKED EventStall
+    // must not be silently reactivated — it needs manual review instead.
+    boolean existsByStallIdAndAvailabilityStatusIn(UUID stallId, List<AvailabilityStatus> statuses);
 
     // Count available stalls for an event — for dashboard metrics
     long countByEventIdAndAvailabilityStatusAndActiveForEventTrue(

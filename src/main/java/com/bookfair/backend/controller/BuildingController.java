@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.UUID;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -13,7 +14,6 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.bookfair.backend.dto.common.ApiResponseDto;
@@ -29,39 +29,40 @@ import lombok.RequiredArgsConstructor;
 @RestController
 @RequestMapping("/api/v1/buildings")
 @RequiredArgsConstructor
-@PreAuthorize("hasRole('SUPER_ADMIN')")
 public class BuildingController {
 
     private final BuildingService buildingService;
 
+    @PreAuthorize("hasRole('SUPER_ADMIN') or @orgAuth.isVenueOwnerAdminByVenue(authentication, #request.venueId())")
     @PostMapping
-    @ResponseStatus(HttpStatus.CREATED)
-    public ApiResponseDto<BuildingResponse> createBuilding(@Valid @RequestBody CreateBuildingRequest request) {
+    public ResponseEntity<ApiResponseDto<BuildingResponse>> createBuilding(@Valid @RequestBody CreateBuildingRequest request) {
         BuildingResponse data = buildingService.createBuilding(request);
-        return new ApiResponseDto<BuildingResponse>(true, "Building created successfully", data, Instant.now());
+        return ResponseEntity.status(HttpStatus.CREATED).body(new ApiResponseDto<>(true, "Building created successfully", data, Instant.now()));
     }
 
     @GetMapping("/{id}")
-    public ApiResponseDto<BuildingResponse> getBuildingById(@PathVariable UUID id) {
+    public ResponseEntity<ApiResponseDto<BuildingResponse>> getBuildingById(@PathVariable UUID id) {
         BuildingResponse data = buildingService.getBuildingById(id);
-        return new ApiResponseDto<BuildingResponse>(true, "Building fetched successfully", data, Instant.now());
+        return ResponseEntity.ok(new ApiResponseDto<>(true, "Building fetched successfully", data, Instant.now()));
     }
 
+    @PreAuthorize("hasRole('SUPER_ADMIN') or @orgAuth.isVenueOwnerAdminByBuilding(authentication, #id)")
     @PutMapping("/{id}")
-    public ApiResponseDto<BuildingResponse> updateBuilding(@PathVariable UUID id, @Valid @RequestBody UpdateBuildingRequest request) {
+    public ResponseEntity<ApiResponseDto<BuildingResponse>> updateBuilding(@PathVariable UUID id, @Valid @RequestBody UpdateBuildingRequest request) {
         BuildingResponse data = buildingService.updateBuilding(id, request);
-        return new ApiResponseDto<BuildingResponse>(true, "Building updated successfully", data, Instant.now());
+        return ResponseEntity.ok(new ApiResponseDto<>(true, "Building updated successfully", data, Instant.now()));
     }
 
+    @PreAuthorize("hasRole('SUPER_ADMIN') or @orgAuth.isVenueOwnerAdminByBuilding(authentication, #id)")
     @DeleteMapping("/{id}")
-    public ApiResponseDto<Void> deleteBuilding(@PathVariable UUID id) {
+    public ResponseEntity<ApiResponseDto<Void>> deleteBuilding(@PathVariable UUID id) {
         buildingService.deleteBuilding(id);
-        return new ApiResponseDto<Void>(true, "Building deleted successfully", null, Instant.now());
+        return ResponseEntity.ok(new ApiResponseDto<>(true, "Building deactivated successfully", null, Instant.now()));
     }
 
     @GetMapping("/{id}/floors")
-    public ApiResponseDto<List<FloorResponse>> getFloorsByBuilding(@PathVariable UUID id) {
+    public ResponseEntity<ApiResponseDto<List<FloorResponse>>> getFloorsByBuilding(@PathVariable UUID id) {
         List<FloorResponse> data = buildingService.getFloorsByBuilding(id);
-        return new ApiResponseDto<List<FloorResponse>>(true, "Floors fetched successfully", data, Instant.now());
+        return ResponseEntity.ok(new ApiResponseDto<>(true, "Floors fetched successfully", data, Instant.now()));
     }
 }

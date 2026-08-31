@@ -6,67 +6,38 @@ import java.time.LocalTime;
 import java.util.List;
 import java.util.UUID;
 
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
-import jakarta.validation.constraints.NotBlank;
 
-@Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
-public class UpdateReservationRequest {
+public record UpdateReservationRequest(
     @NotNull(message = "User id is required")
-    private UUID userId;
+    UUID userId,
 
     @NotNull(message = "Book fair id is required")
-    private UUID eventId;
+    UUID eventId,
 
     @NotEmpty(message = "At least one stall id is required")
-    private List<UUID> stallIds;
+    List<UUID> stallIds,
 
     @NotNull(message = "Date is required")
-    private LocalDate date;
+    LocalDate date,
 
     @NotNull(message = "Reservation start time is required")
-    private Instant reservationStartDateTime;
+    Instant reservationStartDateTime,
 
     @NotNull(message = "Expiration time is required")
-    private Instant expiresAt;
+    Instant expiresAt,
 
     @NotNull(message = "Time is required")
-    private LocalTime time;
+    LocalTime time,
 
     @NotBlank(message = "Status is required")
-    private String status;
+    String status,
 
     @NotNull(message = "Genre id is required")
-    private UUID genreId;
-    
+    UUID genreId,
+
     @NotBlank(message = "Qr code payload is required")
-    private String qrCodePayload;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-}
+    String qrCodePayload
+) {}

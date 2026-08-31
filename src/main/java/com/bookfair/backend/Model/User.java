@@ -1,9 +1,9 @@
 package com.bookfair.backend.model;
 
 import jakarta.persistence.*;
+import com.bookfair.backend.model.enums.SystemRole;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
-import lombok.AllArgsConstructor;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -13,7 +13,6 @@ import lombok.ToString;
 import com.bookfair.backend.converter.PiiEncryptionConverter;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 
-import java.util.UUID;
 
 @Entity
 @Table(name = "users", indexes = {
@@ -25,12 +24,7 @@ import java.util.UUID;
 @ToString
 @EqualsAndHashCode(callSuper = true)
 @NoArgsConstructor
-@AllArgsConstructor
 public class User extends BaseEntity {
-
-    @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    private UUID id;
 
     @Column(unique = true, nullable = false)
     @NotBlank(message = "Username is required")
@@ -71,10 +65,5 @@ public class User extends BaseEntity {
 
     @Embedded
     private DeletionAudit deletionAudit;
-
-    public enum SystemRole {
-        SUPER_ADMIN, // Platform owner
-        CUSTOMER // Standard public user
-    }
 
 }

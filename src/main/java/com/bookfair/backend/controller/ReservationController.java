@@ -76,7 +76,7 @@ public class ReservationController {
                 Instant.now()));
     }
 
-    @PreAuthorize("hasAnyRole('ADMIN', 'ORG_ADMIN')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ORG_ADMIN')")
     @GetMapping
     public ResponseEntity<ApiResponseDto<Page<ReservationResponse>>> getAllReservations(
             @PageableDefault(size = 20, sort = "createdAt") Pageable pageable) {
@@ -85,7 +85,7 @@ public class ReservationController {
                 .ok(new ApiResponseDto<>(true, "Reservations retrieved successfully", response, Instant.now()));
     }
 
-    @PreAuthorize("hasAnyRole('ADMIN', 'ORG_ADMIN')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ORG_ADMIN')")
     @PostMapping("/{reservationId}/confirm")
     public ResponseEntity<ApiResponseDto<Void>> confirmReservation(@PathVariable UUID reservationId) {
         reservationService.confirmReservation(reservationId);
@@ -93,7 +93,7 @@ public class ReservationController {
                 .ok(new ApiResponseDto<>(true, "Reservation confirmed successfully", null, Instant.now()));
     }
 
-    @PreAuthorize("hasAnyRole('ADMIN', 'ORG_ADMIN')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ORG_ADMIN')")
     @PostMapping("/{reservationId}/refund")
     public ResponseEntity<ApiResponseDto<Void>> approveRefund(@PathVariable UUID reservationId) {
         reservationService.approveRefund(reservationId);

@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Organization Profile Updated</title>
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #f4f4f4; padding: 20px; }
+        .container { background-color: #ffffff; padding: 30px; border-radius: 8px; max-width: 600px; margin: auto; }
+        .header { color: #0275d8; font-size: 24px; font-weight: bold; margin-bottom: 20px; }
+        .content { font-size: 16px; color: #333333; line-height: 1.5; }
+        .footer { margin-top: 30px; font-size: 12px; color: #777777; text-align: center; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">Organization Profile Updated</div>
+        <div class="content">
+            <p>Hello <span th:text="${userName}">User</span>,</p>
+            <p><span th:text="${alertMessage}">Your organization profile has been updated.</span></p>
+            <p>If you did not authorize these changes, please contact support immediately.</p>
+        </div>
+        <div class="footer">
+            &copy; Clausis Technologies. All rights reserved.
+        </div>
+    </div>
+</body>
+</html>

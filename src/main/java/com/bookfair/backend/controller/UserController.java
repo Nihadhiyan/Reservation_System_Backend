@@ -36,43 +36,43 @@ public class UserController {
     
     private final UserService userService;
     
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
     @GetMapping
     public ResponseEntity<ApiResponseDto<Page<UserResponse>>> getAllUsers(@PageableDefault(size = 20, sort = "createdAt") Pageable pageable) {
         Page<UserResponse> data = userService.getAllUsers(pageable);
         return ResponseEntity.ok(new ApiResponseDto<>(true, "Users retrieved successfully", data, Instant.now()));
     }
     
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
     @GetMapping("/{id}")
     public ResponseEntity<ApiResponseDto<UserResponse>> getUserById(@PathVariable UUID id) {
         UserResponse data = userService.getUserProfile(id);
         return ResponseEntity.ok(new ApiResponseDto<>(true, "User retrieved successfully", data, Instant.now()));
     }
 
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
     @PatchMapping("/{id}/role")
     public ResponseEntity<ApiResponseDto<Void>> updateRole(@PathVariable UUID id, @Valid @RequestBody UpdateUserRoleRequest updateUserRoleRequest) {
         userService.setRole(id, updateUserRoleRequest);
         return ResponseEntity.ok(new ApiResponseDto<>(true, "Role Updated Successfully", null, Instant.now()));
     }
 
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
     @DeleteMapping("/{id}")
     public ResponseEntity<ApiResponseDto<Void>> deleteUserAsAdmin(@PathVariable UUID id) {
         userService.deleteUserAsAdmin(id);
         return ResponseEntity.ok(new ApiResponseDto<>(true, "User deleted successfully", null, Instant.now()));
     }
 
-    @PreAuthorize("isAuthenticated()")  
+    @PreAuthorize("isAuthenticated()")
     @DeleteMapping("/me")
     public ResponseEntity<ApiResponseDto<Void>> deleteMyAccount(Authentication authentication) {
-        String currentUserName = authentication.getName();
-        userService.deleteMyAccount(currentUserName);
+        UUID currentUserId = UUID.fromString(authentication.getName());
+        userService.deleteMyAccount(currentUserId);
         return ResponseEntity.ok(new ApiResponseDto<>(true, "Account deleted successfully", null, Instant.now()));
     }
 
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
     @GetMapping("/{id}/reservations")
     public ResponseEntity<ApiResponseDto<List<ReservationResponse>>> getAllReservations(@PathVariable UUID id) {
         List<ReservationResponse> data = userService.getUserReservations(id);
@@ -82,23 +82,24 @@ public class UserController {
     @PreAuthorize("isAuthenticated()")
     @GetMapping("/me")
     public ResponseEntity<ApiResponseDto<UserResponse>> getMyProfile(Authentication authentication) {
-        String currentUsername = authentication.getName(); 
-        UserResponse data = userService.getMyProfile(currentUsername);
+        UUID currentUserId = UUID.fromString(authentication.getName());
+        UserResponse data = userService.getUserProfile(currentUserId);
         return ResponseEntity.ok(new ApiResponseDto<>(true, "Profile retrieved successfully", data, Instant.now()));
     }
 
     @PreAuthorize("isAuthenticated()")
     @PutMapping("/me")
     public ResponseEntity<ApiResponseDto<UserResponse>> updateUser(Authentication authentication, @Valid @RequestBody UpdateUserRequest userUpdateRequest) {
-        String currentUsername = authentication.getName();
-        UserResponse data = userService.updateUser(currentUsername, userUpdateRequest);
+        UUID currentUserId = UUID.fromString(authentication.getName());
+        UserResponse data = userService.updateUser(currentUserId, userUpdateRequest);
         return ResponseEntity.ok(new ApiResponseDto<>(true, "Profile updated successfully", data, Instant.now()));
     }
 
     @PreAuthorize("isAuthenticated()")
     @GetMapping("/me/reservations")
     public ResponseEntity<ApiResponseDto<List<ReservationResponse>>> getMyReservations(Authentication authentication) {
-        List<ReservationResponse> data = userService.getMyReservations(authentication.getName());
+        UUID currentUserId = UUID.fromString(authentication.getName());
+        List<ReservationResponse> data = userService.getUserReservations(currentUserId);
         return ResponseEntity.ok(new ApiResponseDto<>(true, "My reservations retrieved successfully", data, Instant.now()));
     }
 }

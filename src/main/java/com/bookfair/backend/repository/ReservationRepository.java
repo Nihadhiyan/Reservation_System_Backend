@@ -1,5 +1,7 @@
 package com.bookfair.backend.repository;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
@@ -7,7 +9,7 @@ import org.springframework.data.jpa.repository.QueryHints;
 import org.springframework.stereotype.Repository;
 
 import com.bookfair.backend.model.Reservation;
-import com.bookfair.backend.model.Reservation.ReservationStatus;
+import com.bookfair.backend.model.enums.ReservationStatus;
 
 import jakarta.persistence.LockModeType;
 import jakarta.persistence.QueryHint;
@@ -26,20 +28,28 @@ public interface ReservationRepository extends JpaRepository<Reservation, UUID> 
     
     List<Reservation> findByUserId(UUID userId);
     
-    List<Reservation> findByUserIdAndStatus(UUID userId, Reservation.ReservationStatus status);
+    List<Reservation> findByOrganizationIdAndStatus(UUID organizationId, ReservationStatus status);
+    
+    List<Reservation> findByUserIdAndStatus(UUID userId, ReservationStatus status);
 
     List<Reservation> findByUserOrderByCreatedAtDesc(User user);
     
-    List<Reservation> findByStatus(Reservation.ReservationStatus status);
+    List<Reservation> findByStatus(ReservationStatus status);
 
-    Optional<Reservation> findByIdAndStatus(UUID reservationId, Reservation.ReservationStatus status);
+    Optional<Reservation> findByIdAndStatus(UUID reservationId, ReservationStatus status);
 
     List<Reservation> findByEventId(UUID eventId);
 
-    @Query("SELECT DISTINCT r FROM Reservation r JOIN r.reservedStalls rs WHERE rs.eventStall.id = :eventStallId AND r.status IN :statuses")
-    List<Reservation> findByEventStallIdAndStatusIn(@Param("eventStallId") UUID eventStallId, @Param("statuses") List<ReservationStatus> statuses);
+    // Avoids one query per stall when checking a whole
+    // Venue/Building/Floor/Hall-level booking's stalls for active vendor reservations.
+    @Query("SELECT DISTINCT r FROM Reservation r JOIN r.spaceBookings b "
+            + "WHERE b.event.id = :eventId AND b.stall.id IN :stallIds AND r.status IN :statuses")
+    List<Reservation> findByEventIdAndStallIdInAndStatusIn(@Param("eventId") UUID eventId,
+            @Param("stallIds") List<UUID> stallIds, @Param("statuses") List<ReservationStatus> statuses);
 
-    List<Reservation> findByExpiresAtBeforeAndStatus(Instant expiresAt, Reservation.ReservationStatus status);
+    Page<Reservation> findByOrganizationId(UUID organizationId, Pageable pageable);
+
+    List<Reservation> findByExpiresAtBeforeAndStatus(Instant expiresAt, ReservationStatus status);
 
     long countByExpiresAtAfterAndStatus(Instant date, ReservationStatus status);
 

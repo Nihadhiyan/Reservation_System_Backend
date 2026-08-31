@@ -6,11 +6,14 @@ import java.util.List;
 import java.util.UUID;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import com.bookfair.backend.config.StripeProperties;
 
 import com.bookfair.backend.dto.payment.request.CreatePaymentRequest;
 import com.bookfair.backend.dto.payment.response.PaymentResponse;
+import com.bookfair.backend.exception.ErrorCode;
+import com.bookfair.backend.exception.PaymentException;
 import com.bookfair.backend.integration.payment.PaymentGateway;
 import com.stripe.Stripe;
 import com.stripe.exception.SignatureVerificationException;
@@ -27,6 +30,7 @@ import com.stripe.param.checkout.SessionCreateParams.LineItem.PriceData.ProductD
 
 @Component
 @RequiredArgsConstructor
+@Slf4j
 public class StripePaymentGateway implements PaymentGateway {
 
     private final StripeProperties stripeProperties;
@@ -36,8 +40,8 @@ public class StripePaymentGateway implements PaymentGateway {
         try {
             Stripe.apiKey = stripeProperties.getApi().getKey();
 
-            long amountInCents = request.getAmount().multiply(BigDecimal.valueOf(100)).longValue();
-            String productName = "Reservation ID: " + request.getReservationId();
+            long amountInCents = request.amount().multiply(BigDecimal.valueOf(100)).longValue();
+            String productName = "Reservation ID: " + request.reservationId();
 
             List<LineItem> lineItems = Arrays.asList(
                     new LineItem.Builder()
@@ -53,22 +57,18 @@ public class StripePaymentGateway implements PaymentGateway {
 
             SessionCreateParams sessionParams = SessionCreateParams.builder()
                     .setMode(SessionCreateParams.Mode.PAYMENT)
-                    .setSuccessUrl("http://localhost:5173/booking-success?session_id={CHECKOUT_SESSION_ID}")
-                    .setCancelUrl("http://localhost:5173/booking-cancel")
+                    .setSuccessUrl(stripeProperties.getCheckout().getSuccessUrl())
+                    .setCancelUrl(stripeProperties.getCheckout().getCancelUrl())
                     .addAllLineItem(lineItems)
-                    .putMetadata("reservationId", request.getReservationId().toString())
+                    .putMetadata("reservationId", request.reservationId().toString())
                     .build();
 
             Session session = Session.create(sessionParams);
 
-            PaymentResponse response = new PaymentResponse();
-            response.setGateway("STRIPE");
-            response.setTransactionId(session.getId());
-            response.setPaymentUrl(session.getUrl());
-            return response;
+            return new PaymentResponse(null, request.reservationId(), null, request.amount(), "PENDING", "STRIPE", session.getId(), session.getUrl());
 
         } catch (StripeException e) {
-            throw new RuntimeException("Stripe initialization failed: " + e.getMessage());
+            throw new PaymentException("Stripe initialization failed: " + e.getMessage(), e, ErrorCode.PAYMENT_FAILED);
         }
     }
 
@@ -98,7 +98,7 @@ public class StripePaymentGateway implements PaymentGateway {
             
             return new PaymentWebhookResult(true, null, "IGNORED", null, null);
         } catch (SignatureVerificationException e) {
-            System.err.println("Webhook verification failed: " + e.getMessage());
+            log.error("Webhook verification failed: {}", e.getMessage());
             return new PaymentWebhookResult(false, null, "FAILED", null, null);
         }
     }

@@ -10,6 +10,7 @@ import org.springframework.stereotype.Repository;
 
 import com.bookfair.backend.model.Organization;
 
+
 @Repository
 public interface OrganizationRepository extends JpaRepository<Organization, UUID> {
 
@@ -20,4 +21,7 @@ public interface OrganizationRepository extends JpaRepository<Organization, UUID
     Page<Organization> findAllByActiveTrue(Pageable pageable);
     
     Optional<Organization> findByIdAndActiveTrue(UUID id);
+
+    boolean existsByRegistrationNumberAndActiveTrue(String registrationNumber);
+
 }

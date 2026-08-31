@@ -24,7 +24,7 @@ import com.bookfair.backend.dto.common.ApiResponseDto;
 import com.bookfair.backend.dto.event.request.CreateEventRequest;
 import com.bookfair.backend.dto.event.request.UpdateEventRequest;
 import com.bookfair.backend.dto.event.response.EventResponse;
-import com.bookfair.backend.dto.event.response.EventStallResponse;
+
 import com.bookfair.backend.service.EventService;
 
 import jakarta.validation.Valid;
@@ -54,27 +54,23 @@ public class EventController {
         return ResponseEntity.ok(new ApiResponseDto<>(true, "Event retrieved successfully", response, Instant.now()));
     }
 
-    @GetMapping("/{id}/stalls")
-    public ResponseEntity<ApiResponseDto<List<EventStallResponse>>> getStallsForEvent(@PathVariable UUID id) {
-        List<EventStallResponse> response = eventService.getStallsForEvent(id);
-        return ResponseEntity.ok(new ApiResponseDto<>(true, "Event stalls retrieved successfully", response, Instant.now()));
-    }
 
-    @PreAuthorize("hasAnyRole('ADMIN', 'ORG_ADMIN')")
+
+    @PreAuthorize("@orgAuth.isOrganizerAdmin(authentication, #request.organizerId())")
     @PostMapping
     public ResponseEntity<ApiResponseDto<EventResponse>> createEvent(@RequestBody @Valid CreateEventRequest request) {
         EventResponse response = eventService.createEvent(request);
         return ResponseEntity.ok(new ApiResponseDto<>(true, "Event created successfully", response, Instant.now()));
     }
 
-    @PreAuthorize("hasAnyRole('ADMIN', 'ORG_ADMIN')")
+    @PreAuthorize("@orgAuth.isOrganizerAdminByEvent(authentication, #id)")
     @PutMapping("/{id}")
     public ResponseEntity<ApiResponseDto<EventResponse>> updateEvent(@PathVariable UUID id, @RequestBody @Valid UpdateEventRequest request) {
         EventResponse response = eventService.updateEvent(id, request);
         return ResponseEntity.ok(new ApiResponseDto<>(true, "Event updated successfully", response, Instant.now()));
     }
 
-    @PreAuthorize("hasAnyRole('ADMIN', 'ORG_ADMIN')")
+    @PreAuthorize("@orgAuth.isOrganizerAdminByEvent(authentication, #id)")
     @DeleteMapping("/{id}")
     public ResponseEntity<ApiResponseDto<Void>> deleteEvent(@PathVariable UUID id) {
         eventService.deleteEvent(id);

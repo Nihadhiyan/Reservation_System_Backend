@@ -1,7 +1,8 @@
 package com.bookfair.backend.model;
 
-import java.util.UUID;
 
+
+import com.bookfair.backend.model.enums.FeatureType;
 
 import jakarta.persistence.AttributeOverride;
 import jakarta.persistence.AttributeOverrides;
@@ -11,16 +12,13 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
-import lombok.AllArgsConstructor;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -31,13 +29,9 @@ import lombok.ToString;
 @Table(name = "layout_markers")
 @Getter
 @Setter
+@ToString
 @NoArgsConstructor
-@AllArgsConstructor
 public class LayoutMarker extends BaseEntity {
-
-    @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    private UUID id;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "venue_id")
@@ -68,6 +62,7 @@ public class LayoutMarker extends BaseEntity {
             @AttributeOverride(name = "width", column = @Column(name = "marker_width")),
             @AttributeOverride(name = "height", column = @Column(name = "marker_height"))
     })
+    @Valid
     private LayoutPosition layout;
 
     @Column(nullable = false)
@@ -94,22 +89,5 @@ public class LayoutMarker extends BaseEntity {
         if (parentCount > 1) {
             throw new IllegalStateException("LayoutMarker cannot be associated with more than one parent entity.");
         }
-    }
-
-    public enum FeatureType {
-        ENTRANCE,
-        EXIT,
-        EMERGENCY_EXIT,
-        AISLE,
-        STAIRCASE,
-        ELEVATOR,
-        ESCALATOR,
-        RESTROOM,
-        FOOD_ZONE,
-        INFO_DESK,
-        PARKING,
-        SECURITY_CHECKPOINT,
-        VIP_ENTRANCE,
-        TICKET_COUNTER
     }
 }

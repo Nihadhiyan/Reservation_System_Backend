@@ -1,6 +1,7 @@
 package com.bookfair.backend.controller;
 
 import java.time.Instant;
+import java.util.UUID;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -23,18 +24,31 @@ public class AdminController {
 
     private final AdminService adminService;
 
-    @PreAuthorize("hasRole('SUPER_ADMIN') or hasRole('ORG_ADMIN')")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
     @GetMapping("/dashboard")
     public ResponseEntity<ApiResponseDto<AdminDashboardResponse>> getDashboardMetrics() {
         AdminDashboardResponse data = adminService.getDashboardStats();
         return ResponseEntity.ok(new ApiResponseDto<>(true, "Dashboard metrics fetched successfully", data, Instant.now()));
     }
 
+    @PreAuthorize("hasRole('ORG_ADMIN')")
+    @GetMapping("/dashboard/org")
+    public ResponseEntity<ApiResponseDto<AdminDashboardResponse>> getOrgDashboardMetrics(org.springframework.security.core.Authentication authentication) {
+        AdminDashboardResponse data = adminService.getOrgDashboardStats(UUID.fromString(authentication.getName()));
+        return ResponseEntity.ok(new ApiResponseDto<>(true, "Org dashboard metrics fetched successfully", data, Instant.now()));
+    }
+
     @PreAuthorize("hasRole('SUPER_ADMIN')")
     @PostMapping("/system/maintenance")
     public ResponseEntity<ApiResponseDto<String>> toggleMaintenanceMode() {
-        adminService.toggleMaintenanceMode();
-        String status = "Maintenance mode is now: " + adminService.isMaintenanceMode();
-        return ResponseEntity.ok(new ApiResponseDto<>(true, status, status, Instant.now()));
+        boolean newMode = adminService.toggleMaintenanceMode();
+        String status = "Maintenance mode is now: " + newMode;
+        return ResponseEntity.ok(new ApiResponseDto<>(true, "Maintenance mode toggled successfully", status, Instant.now()));
+    }
+
+    @GetMapping("/system/maintenance")
+    public ResponseEntity<ApiResponseDto<Boolean>> getMaintenanceMode() {
+        return ResponseEntity.ok(new ApiResponseDto<>(
+                true, "Maintenance mode status", adminService.isMaintenanceMode(), Instant.now()));
     }
 }

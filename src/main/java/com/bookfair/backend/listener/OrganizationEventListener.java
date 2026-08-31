@@ -2,6 +2,7 @@ package com.bookfair.backend.listener;
 
 import java.util.List;
 
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
@@ -19,6 +20,7 @@ public class OrganizationEventListener {
 
     private final OrganizationMemberRepository memberRepository;
 
+    @Async("taskExecutor")
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onOrganizationCapabilityChanged(OrganizationCapabilityChangedEvent event) {
         log.info("Capability changed for organization {}", event.organizationId());

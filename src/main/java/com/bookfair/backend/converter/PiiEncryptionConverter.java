@@ -2,9 +2,13 @@ package com.bookfair.backend.converter;
 
 import jakarta.persistence.AttributeConverter;
 import jakarta.persistence.Converter;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
+
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+
+import com.bookfair.backend.config.AppProperties;
 
 import javax.crypto.Cipher;
 import javax.crypto.spec.GCMParameterSpec;
@@ -17,6 +21,7 @@ import java.util.Base64;
 
 @Converter
 @Component
+@RequiredArgsConstructor
 @Slf4j
 public class PiiEncryptionConverter implements AttributeConverter<String, String> {
 
@@ -25,9 +30,9 @@ public class PiiEncryptionConverter implements AttributeConverter<String, String
     private static final int TAG_LENGTH_BIT = 128;
     private static String staticSecretKey = null;
 
-    @Value("${app.security.pii-secret:${PII_SECRET_KEY:0123456789abcdef0123456789abcdef}}")
-    public void setSecretKey(String key) {
-        staticSecretKey = key;
+    @Autowired
+    public void setAppProperties(AppProperties appProperties) {
+        staticSecretKey = appProperties.getSecurity().getPiiSecret();
     }
 
     private SecretKeySpec getSecretKeySpec() throws Exception {
@@ -36,7 +41,9 @@ public class PiiEncryptionConverter implements AttributeConverter<String, String
             key = System.getenv("PII_SECRET_KEY");
         }
         if (key == null || key.isEmpty()) {
-            key = "0123456789abcdef0123456789abcdef"; // Safe fallback for dev/test environments
+            throw new IllegalStateException(
+                    "PII encryption key is not configured. Set app.security.pii-secret or the "
+                            + "PII_SECRET_KEY environment variable — there is no fallback key.");
         }
         // Hash key with SHA-256 to guarantee exactly 256 bits (32 bytes) for AES-256
         byte[] keyBytes = MessageDigest.getInstance("SHA-256").digest(key.getBytes(StandardCharsets.UTF_8));

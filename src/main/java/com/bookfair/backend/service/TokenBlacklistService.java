@@ -18,6 +18,7 @@ import java.util.concurrent.TimeUnit;
 public class TokenBlacklistService {
 
     private static final String CHECKPOINT_KEY_PREFIX = "user_security_checkpoint:";
+    private static final String BLACKLISTED_KEY_PREFIX = "blacklisted_jti:";
 
     private final StringRedisTemplate redisTemplate;
 
@@ -70,7 +71,7 @@ public class TokenBlacklistService {
 
         try {
             Objects.requireNonNull(redisTemplate.opsForValue()).set(
-                    "blacklisted_jti:" + jti,
+                    BLACKLISTED_KEY_PREFIX + jti,
                     "revoked",
                     remainingLifespanSeconds,
                     TimeUnit.SECONDS);
@@ -78,6 +79,7 @@ public class TokenBlacklistService {
                     remainingLifespanSeconds);
         } catch (Exception e) {
             log.error("Failed to blacklist individual JTI [{}]: {}", jti, e.getMessage());
+            throw new IllegalStateException("Failed to blacklist individual token due to datastore unavailable", e);
         }
     }
 
@@ -85,7 +87,7 @@ public class TokenBlacklistService {
         if (jti == null || jti.isBlank())
             return false;
         try {
-            return Boolean.TRUE.equals(redisTemplate.hasKey(Objects.requireNonNull("blacklisted_jti:" + jti)));
+            return Boolean.TRUE.equals(redisTemplate.hasKey(Objects.requireNonNull(BLACKLISTED_KEY_PREFIX + jti)));
         } catch (Exception e) {
             log.warn("Redis JTI blacklist check failed, failing open: {}", e.getMessage());
             return false;

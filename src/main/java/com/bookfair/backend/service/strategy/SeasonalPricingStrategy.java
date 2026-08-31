@@ -10,15 +10,16 @@ public class SeasonalPricingStrategy implements PricingStrategy {
     @Override
     public boolean matches(String conditionValue, PricingContext context) {
         if (conditionValue == null || context.eventStartDate() == null) return false;
-        
+
         int month = context.eventStartDate().atZone(ZoneOffset.UTC).getMonthValue();
-        
-        if (conditionValue.equalsIgnoreCase("SUMMER")) {
-            return month >= 6 && month <= 8; // June, July, August
-        }
-        
-        // Add more seasonal rules here
-        return false;
+
+        return switch (conditionValue.toUpperCase()) {
+            case "SUMMER" -> month >= 6 && month <= 8;  // June, July, August
+            case "FALL" -> month >= 9 && month <= 11;   // September, October, November
+            case "WINTER" -> month == 12 || month <= 2; // December, January, February
+            case "SPRING" -> month >= 3 && month <= 5;  // March, April, May
+            default -> false;
+        };
     }
 
     @Override

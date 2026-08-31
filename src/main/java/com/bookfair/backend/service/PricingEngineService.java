@@ -14,6 +14,8 @@ import com.bookfair.backend.dto.pricing.response.PricingBreakdownResponse;
 import com.bookfair.backend.dto.pricing.response.StallPricingResponse;
 import com.bookfair.backend.model.PricingRule;
 import com.bookfair.backend.model.Stall;
+import com.bookfair.backend.model.Venue;
+import com.bookfair.backend.model.enums.RentType;
 import com.bookfair.backend.repository.PricingRuleRepository;
 import com.bookfair.backend.repository.StallRepository;
 import com.bookfair.backend.service.strategy.PricingContext;
@@ -34,7 +36,8 @@ public class PricingEngineService {
     private final PricingMapper pricingMapper;
 
     @Transactional(readOnly = true)
-    public PricingBreakdownResponse calculateQuote(List<UUID> stallIds, int durationDays, String orgType) {
+    public PricingBreakdownResponse calculateQuote(List<UUID> stallIds, int durationDays, String orgType,
+            java.time.Instant eventStartDate) {
         requireNonNull(stallIds, "stallIds cannot be null");
         List<Stall> stalls = stallRepository.findAllById(stallIds);
 
@@ -42,7 +45,7 @@ public class PricingEngineService {
         activeRules.sort(
                 java.util.Comparator.comparing(r -> r.getPriority() != null ? r.getPriority() : Integer.MAX_VALUE));
 
-        PricingContext context = new PricingContext(durationDays, orgType, null);
+        PricingContext context = new PricingContext(durationDays, orgType, eventStartDate);
 
         BigDecimal subtotal = BigDecimal.ZERO;
         List<StallPricingResponse> stallPricings = new ArrayList<>();
@@ -73,30 +76,11 @@ public class PricingEngineService {
         return pricingMapper.toPricingBreakdownResponse(stallPricings, subtotal, discountAmount, taxAmount, total, "USD");
     }
 
-    @Transactional(readOnly = true)
-    public BigDecimal calculateFinalPrice(com.bookfair.backend.model.EventStall eventStall) {
-        if (eventStall.getManualOverridePrice() != null) {
-            return eventStall.getManualOverridePrice();
-        }
-        return eventStall.getBasePrice() != null ? eventStall.getBasePrice() : BigDecimal.valueOf(100.0);
-    }
+
 
     @Transactional(readOnly = true)
-    public BigDecimal calculateTotalForReservation(com.bookfair.backend.model.Reservation reservation) {
-        BigDecimal subtotal = BigDecimal.ZERO;
-        if (reservation.getReservedStalls() != null) {
-            for (com.bookfair.backend.model.ReservationStall rs : reservation.getReservedStalls()) {
-                subtotal = subtotal.add(calculateFinalPrice(rs.getEventStall()));
-            }
-        }
-        BigDecimal discountAmount = BigDecimal.ZERO;
-        BigDecimal taxAmount = subtotal.multiply(BigDecimal.valueOf(0.1)).setScale(2, java.math.RoundingMode.HALF_UP);
-        return subtotal.subtract(discountAmount).add(taxAmount).setScale(2, java.math.RoundingMode.HALF_UP);
-    }
-
-    @Transactional(readOnly = true)
-    public BigDecimal calculateVenueRent(com.bookfair.backend.model.Venue venue, int durationDays) {
-        if (venue.getRentType() == com.bookfair.backend.model.Venue.RentType.PERCENTAGE_OF_REVENUE) {
+    public BigDecimal calculateVenueRent(Venue venue, int durationDays) {
+        if (venue.getRentType() == RentType.PERCENTAGE_OF_REVENUE) {
             // Placeholder: Initial liability is 0, grows dynamically later
             return BigDecimal.ZERO;
         }

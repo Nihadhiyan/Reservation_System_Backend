@@ -8,6 +8,9 @@ import com.bookfair.backend.model.Event;
 import com.bookfair.backend.model.EventSettlement;
 import com.bookfair.backend.model.Reservation;
 import com.bookfair.backend.model.TransactionHistory;
+import com.bookfair.backend.model.enums.RentType;
+import com.bookfair.backend.model.enums.SettlementStatus;
+import com.bookfair.backend.model.enums.TransactionRole;
 
 import java.math.BigDecimal;
 
@@ -25,7 +28,7 @@ public interface SettlementMapper {
     @Mapping(target = "status", source = "status")
     @Mapping(target = "amountPaidToOwner", ignore = true)
     @Mapping(target = "organizerProfit", ignore = true)
-    EventSettlement toEventSettlement(Event event, BigDecimal snapshottedDailyRentRate, com.bookfair.backend.model.Venue.RentType snapshottedRentType, BigDecimal totalRent, EventSettlement.SettlementStatus status);
+    EventSettlement toEventSettlement(Event event, BigDecimal snapshottedDailyRentRate, RentType snapshottedRentType, BigDecimal totalRent, SettlementStatus status);
 
     @Mapping(target = "id", ignore = true)
     @Mapping(target = "createdBy", ignore = true)
@@ -39,5 +42,5 @@ public interface SettlementMapper {
     @Mapping(target = "destinationRole", source = "destinationRole")
     @Mapping(target = "reservation", source = "reservation")
     @Mapping(target = "description", source = "description")
-    TransactionHistory toTransactionHistory(Event event, BigDecimal amount, TransactionHistory.TransactionRole sourceRole, TransactionHistory.TransactionRole destinationRole, Reservation reservation, String description);
+    TransactionHistory toTransactionHistory(Event event, BigDecimal amount, TransactionRole sourceRole, TransactionRole destinationRole, Reservation reservation, String description);
 }

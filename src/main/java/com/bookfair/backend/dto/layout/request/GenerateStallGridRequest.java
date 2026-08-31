@@ -2,42 +2,33 @@ package com.bookfair.backend.dto.layout.request;
 
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
 
-@Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
-public class GenerateStallGridRequest {
+public record GenerateStallGridRequest(
+    @NotNull
+    @Min(1)
+    Integer rows,
 
     @NotNull
     @Min(1)
-    private Integer rows;
+    Integer columns,
 
     @NotNull
     @Min(1)
-    private Integer columns;
+    Integer stallWidth,
 
     @NotNull
     @Min(1)
-    private Integer stallWidth;
-
-    @NotNull
-    @Min(1)
-    private Integer stallLength;
+    Integer stallLength,
 
     @NotNull
     @Min(0)
-    private Integer aisleWidth;
+    Integer aisleWidth,
 
     @NotNull
     @Min(0)
-    private Integer startX;
+    Integer startX,
 
     @NotNull
     @Min(0)
-    private Integer startY;
-}
+    Integer startY
+) {}

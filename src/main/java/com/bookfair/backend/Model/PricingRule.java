@@ -1,34 +1,31 @@
 package com.bookfair.backend.model;
 
 import java.math.BigDecimal;
-import java.util.UUID;
+
+import com.bookfair.backend.model.enums.ConditionType;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
 import jakarta.persistence.Table;
-import lombok.AllArgsConstructor;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.PositiveOrZero;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import lombok.ToString;
 
 @Entity
 @Table(name = "pricing_rules")
 @Getter
 @Setter
-@AllArgsConstructor
+@ToString
 @NoArgsConstructor
 public class PricingRule extends BaseEntity {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    private UUID id;
-
     @Column(nullable = false)
+    @NotBlank(message = "Rule name is required")
     private String name;
 
     @Column(nullable = false)
@@ -42,6 +39,7 @@ public class PricingRule extends BaseEntity {
     private String conditionValue; // e.g., NON_PROFIT, >7_DAYS, SUMMER
 
     @Column(nullable = false)
+    @PositiveOrZero(message = "Multiplier must be non-negative")
     private BigDecimal multiplier;
 
     @Column(nullable = false)
@@ -49,9 +47,5 @@ public class PricingRule extends BaseEntity {
 
     @Column(name = "priority")
     private Integer priority;
-
-    public enum ConditionType {
-        ORG_TYPE, DURATION, SEASONAL
-    }
 
 }

@@ -42,7 +42,7 @@ public class GenreService {
 
     @Transactional
     public GenreResponse createGenre(CreateGenreRequest request) {
-        if (genreRepository.existsByName(request.getName())) {
+        if (genreRepository.existsByName(request.name())) {
             throw new BusinessException("Genre name already exists", ErrorCode.BUSINESS_RULE_VIOLATION);
         }
 

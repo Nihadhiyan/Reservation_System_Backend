@@ -3,32 +3,24 @@ package com.bookfair.backend.dto.stall.request;
 import java.util.UUID;
 
 import com.bookfair.backend.dto.common.LayoutPositionDto;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
-@Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
-public class CreateStallRequest {
+public record CreateStallRequest(
     @NotNull(message = "Hall id is required")
-    private UUID hallId;
+    UUID hallId,
 
     @NotBlank(message = "Name is required")
-    private String name;
+    String name,
 
     @NotBlank(message = "Stall type is required")
-    private String stallType;
+    String stallType,
 
     @Valid
     @NotNull(message = "Layout is required")
-    private LayoutPositionDto layout;
-    
+    LayoutPositionDto layout,
+
     @NotNull(message = "Square footage is required")
-    private Double squareFootage;
-}
+    Double squareFootage
+) {}

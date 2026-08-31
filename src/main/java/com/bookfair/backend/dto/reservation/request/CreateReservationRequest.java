@@ -1,38 +1,38 @@
 package com.bookfair.backend.dto.reservation.request;
 
 import java.time.Instant;
-import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
-import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
 
-@Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
-public class CreateReservationRequest {
-
+public record CreateReservationRequest(
     @NotNull(message = "Event id is required")
-    private UUID eventId;
+    UUID eventId,
 
-    @NotEmpty(message = "At least one stall id is required")
-    private List<UUID> stallIds;
+    Set<UUID> venueIds,
+    Set<UUID> buildingIds,
+    Set<UUID> floorIds,
+    Set<UUID> hallIds,
+    Set<UUID> stallIds,
 
     @NotNull(message = "Reservation start time is required")
-    private Instant reservationStartDateTime;
+    Instant reservationStartDateTime,
 
     @NotNull(message = "Expiration time is required")
-    private Instant expiresAt;
+    Instant expiresAt,
 
     @NotNull(message = "Genre id is required")
-    private UUID genreId;
+    UUID genreId,
 
     @NotNull(message = "Organization id is required")
-    private UUID organizationId;
-
+    UUID organizationId
+) {
+    public boolean hasAnySelection() {
+        return (venueIds != null && !venueIds.isEmpty()) ||
+               (buildingIds != null && !buildingIds.isEmpty()) ||
+               (floorIds != null && !floorIds.isEmpty()) ||
+               (hallIds != null && !hallIds.isEmpty()) ||
+               (stallIds != null && !stallIds.isEmpty());
+    }
 }

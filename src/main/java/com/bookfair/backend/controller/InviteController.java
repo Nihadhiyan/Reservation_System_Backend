@@ -22,7 +22,7 @@ public class InviteController {
     private final InviteService inviteService;
 
     @PostMapping
-    @PreAuthorize("hasRole('SUPER_ADMIN') or hasAuthority('ORG_' + #request.orgId + '_ORG_ADMIN')")
+    @PreAuthorize("@orgAuth.isOrgAdmin(authentication, #request.orgId())")
     public ResponseEntity<ApiResponseDto<Void>> sendInvite(
             @Valid @RequestBody InviteRequest request) {
 

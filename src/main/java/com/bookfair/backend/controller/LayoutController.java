@@ -36,34 +36,33 @@ public class LayoutController {
     private final StallMapper stallMapper;
 
     @GetMapping("/hall/{hallId}")
-    @PreAuthorize("hasAnyRole('USER', 'ORG_ADMIN', 'SUPER_ADMIN')")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<ApiResponseDto<List<StallResponse>>> getHallLayout(@PathVariable UUID hallId) {
-        List<Stall> stalls = layoutGenerationService.getHallLayout(hallId);
-        List<StallResponse> response = stalls.stream().map(stallMapper::toStallResponse).collect(Collectors.toList());
+        List<StallResponse> response = layoutGenerationService.getHallLayout(hallId);
         return ResponseEntity.ok(new ApiResponseDto<>(true, "Hall layout fetched successfully", response, Instant.now()));
     }
 
     @PostMapping("/hall/{hallId}/generate")
-    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    @PreAuthorize("hasRole('SUPER_ADMIN') or @orgAuth.isVenueOwnerAdminByHall(authentication, #hallId)")
     public ResponseEntity<ApiResponseDto<List<StallResponse>>> autoGenerateStallGrid(
             @PathVariable UUID hallId, 
             @Valid @RequestBody GenerateStallGridRequest request) {
         List<Stall> stalls = layoutGenerationService.autoGenerateStallGrid(
                 hallId, 
-                request.getRows(), 
-                request.getColumns(), 
-                request.getStallWidth(), 
-                request.getStallLength(), 
-                request.getAisleWidth(), 
-                request.getStartX(), 
-                request.getStartY()
+                request.rows(), 
+                request.columns(), 
+                request.stallWidth(), 
+                request.stallLength(), 
+                request.aisleWidth(), 
+                request.startX(), 
+                request.startY()
         );
         List<StallResponse> response = stalls.stream().map(stallMapper::toStallResponse).collect(Collectors.toList());
         return ResponseEntity.status(HttpStatus.CREATED).body(new ApiResponseDto<>(true, "Stall grid generated successfully", response, Instant.now()));
     }
 
     @PutMapping("/stall/{stallId}/coordinates")
-    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    @PreAuthorize("hasRole('SUPER_ADMIN') or @orgAuth.isVenueOwnerAdminByStall(authentication, #stallId)")
     public ResponseEntity<ApiResponseDto<StallResponse>> updateStallCoordinates(
             @PathVariable UUID stallId, 
             @Valid @RequestBody LayoutPositionDto request) {

@@ -11,14 +11,12 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.bookfair.backend.model.EventStall;
+import com.bookfair.backend.model.EventSpaceBooking;
 import com.bookfair.backend.model.Reservation;
-import com.bookfair.backend.model.ReservationStall;
-import com.bookfair.backend.model.EventStall.AvailabilityStatus;
-import com.bookfair.backend.model.Reservation.ReservationStatus;
-import com.bookfair.backend.event.cache.EventStallUpdatedEvent;
+import com.bookfair.backend.model.enums.BookingStatus;
+import com.bookfair.backend.model.enums.ReservationStatus;
 import com.bookfair.backend.event.reservation.ReservationExpiredEvent;
-import com.bookfair.backend.repository.EventStallRepository;
+import com.bookfair.backend.repository.EventSpaceBookingRepository;
 import com.bookfair.backend.repository.ReservationRepository;
 import org.springframework.context.ApplicationEventPublisher;
 
@@ -30,7 +28,7 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class ReservationCleanupService {
     private final ReservationRepository reservationRepository;
-    private final EventStallRepository eventStallRepository;
+    private final EventSpaceBookingRepository bookingRepository;
     private final ApplicationEventPublisher eventPublisher;
 
     @Scheduled(fixedRate = 60000)
@@ -45,9 +43,8 @@ public class ReservationCleanupService {
 
         log.info("Found {} expired reservations. Releasing stalls back to the public...", expiredReservations.size());
 
-        List<EventStall> stallsToRelease = new ArrayList<>();
+        List<EventSpaceBooking> bookingsToRelease = new ArrayList<>();
         List<Reservation> confirmedExpired = new ArrayList<>();
-        Set<UUID> affectedEventIds = new HashSet<>();
 
         for (Reservation res : expiredReservations) {
             java.util.Optional<Reservation> lockedOpt = reservationRepository.findByIdAndStatusForUpdate(res.getId(), ReservationStatus.PENDING);
@@ -58,11 +55,9 @@ public class ReservationCleanupService {
             reservation.setStatus(ReservationStatus.EXPIRED);
             confirmedExpired.add(reservation);
 
-            for (ReservationStall rs : reservation.getReservedStalls()) {
-                EventStall eventStall = rs.getEventStall();
-                eventStall.setStatus(AvailabilityStatus.AVAILABLE);
-                stallsToRelease.add(eventStall);
-                affectedEventIds.add(eventStall.getEvent().getId());
+            for (EventSpaceBooking b : reservation.getSpaceBookings()) {
+                b.setStatus(BookingStatus.CANCELLED); // Or EXPIRED depending on exact enum value used for this
+                bookingsToRelease.add(b);
             }
         }
 
@@ -70,19 +65,14 @@ public class ReservationCleanupService {
             return;
         }
 
-        eventStallRepository.saveAll(stallsToRelease);
+        bookingRepository.saveAll(bookingsToRelease);
         reservationRepository.saveAll(confirmedExpired);
 
-        log.info("Successfully released {} stalls from {} expired reservations.", stallsToRelease.size(),
+        log.info("Successfully released {} bookings from {} expired reservations.", bookingsToRelease.size(),
                 confirmedExpired.size());
 
         for (Reservation reservation : confirmedExpired) {
-
             eventPublisher.publishEvent(new ReservationExpiredEvent(reservation.getUser().getId(), reservation.getUser().getUsername(), reservation.getUser().getEmail(), reservation.getId(), reservation.getEvent().getName()));
-        }
-
-        for (UUID eventId : affectedEventIds) {
-            eventPublisher.publishEvent(new EventStallUpdatedEvent(eventId));
         }
 
     }

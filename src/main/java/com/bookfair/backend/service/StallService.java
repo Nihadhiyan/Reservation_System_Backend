@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.time.Instant;
 import java.util.stream.Collectors;
 
 import org.springframework.context.ApplicationEventPublisher;
@@ -16,6 +17,7 @@ import com.bookfair.backend.dto.stall.mapper.StallMapper;
 import com.bookfair.backend.dto.stall.request.CreateStallRequest;
 import com.bookfair.backend.dto.stall.request.UpdateStallRequest;
 import com.bookfair.backend.dto.stall.response.StallResponse;
+import com.bookfair.backend.event.cache.LayoutUpdatedEvent;
 import com.bookfair.backend.event.stall.StallCreatedEvent;
 import com.bookfair.backend.event.stall.StallDeactivatedEvent;
 import com.bookfair.backend.event.stall.StallStatusChangedEvent;
@@ -23,12 +25,13 @@ import com.bookfair.backend.exception.BusinessException;
 import com.bookfair.backend.exception.DuplicateResourceException;
 import com.bookfair.backend.exception.ErrorCode;
 import com.bookfair.backend.exception.ResourceNotFoundException;
-import com.bookfair.backend.model.EventStall;
-import com.bookfair.backend.model.EventStall.AvailabilityStatus;
 import com.bookfair.backend.model.Hall;
+import com.bookfair.backend.model.LayoutMarker;
 import com.bookfair.backend.model.Stall;
-import com.bookfair.backend.repository.EventStallRepository;
+import com.bookfair.backend.model.Event;
+import com.bookfair.backend.repository.EventRepository;
 import com.bookfair.backend.repository.HallRepository;
+import com.bookfair.backend.repository.LayoutMarkerRepository;
 import com.bookfair.backend.repository.StallRepository;
 import static java.util.Objects.requireNonNull;
 
@@ -42,7 +45,8 @@ public class StallService {
 
     private final StallRepository stallRepository;
     private final HallRepository hallRepository;
-    private final EventStallRepository eventStallRepository;
+    private final EventRepository eventRepository;
+    private final LayoutMarkerRepository layoutMarkerRepository;
     private final LayoutGenerationService layoutGenerationService;
     private final StallMapper stallMapper;
     private final ApplicationEventPublisher eventPublisher;
@@ -64,14 +68,24 @@ public class StallService {
     }
 
     @Transactional
-    public List<StallResponse> createStalls(List<CreateStallRequest> stallRequests, String currentUser) {
+    public List<StallResponse> createStalls(List<CreateStallRequest> stallRequests) {
         if (stallRequests == null || stallRequests.isEmpty()) {
-            throw new IllegalArgumentException("Stall requests list must not be empty");
+            throw new BusinessException("Stall requests list must not be empty", ErrorCode.VALIDATION_ERROR);
         }
+
+        org.springframework.security.core.Authentication authentication = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        String currentUser = (authentication != null) ? authentication.getName() : "system";
 
         Set<String> seenNames = new HashSet<>();
         Map<UUID, Long> hallCounts = stallRequests.stream()
-                .collect(Collectors.groupingBy(sr -> requireNonNull(sr.getHallId()), Collectors.counting()));
+                .collect(Collectors.groupingBy(sr -> requireNonNull(sr.hallId()), Collectors.counting()));
+
+        // Prefetched once per distinct Hall in the batch (not per stall) — also fixes
+        // toStallFromCreateStallRequest never populating Stall.hall (a required FK),
+        // which would otherwise NPE in the overlap check below or fail on save.
+        Map<UUID, Hall> hallsById = new java.util.HashMap<>();
+        Map<UUID, List<Stall>> existingStallsByHall = new java.util.HashMap<>();
+        Map<UUID, List<LayoutMarker>> existingMarkersByHall = new java.util.HashMap<>();
 
         for (Map.Entry<UUID, Long> entry : hallCounts.entrySet()) {
             UUID hallId = entry.getKey();
@@ -79,28 +93,40 @@ public class StallService {
             Hall hall = hallRepository.findById(requireNonNull(hallId))
                     .orElseThrow(
                             () -> new ResourceNotFoundException("Hall not found: " + hallId, ErrorCode.HALL_NOT_FOUND));
+            if (!Boolean.TRUE.equals(hall.getActive())) {
+                throw new BusinessException("Cannot create stalls under an inactive Hall: " + hall.getName(),
+                        ErrorCode.BUSINESS_RULE_VIOLATION);
+            }
             if (hall.getMaxStalls() != null) {
-                long currentCount = stallRepository.findByHallIdAndActiveTrue(hallId).size();
+                long currentCount = stallRepository.countByHallIdAndActiveTrue(hallId);
                 if ((currentCount + newCount) > hall.getMaxStalls()) {
-                    throw new IllegalStateException("Creating stalls exceeds Hall capacity limit of "
-                            + hall.getMaxStalls() + " for hall " + hall.getName());
+                    throw new BusinessException("Creating stalls exceeds Hall capacity limit of "
+                            + hall.getMaxStalls() + " for hall " + hall.getName(), ErrorCode.BUSINESS_RULE_VIOLATION);
                 }
             }
+            hallsById.put(hallId, hall);
+            existingStallsByHall.put(hallId, new ArrayList<>(stallRepository.findByHallIdAndActiveTrue(hallId)));
+            existingMarkersByHall.put(hallId, layoutMarkerRepository.findByHallIdAndActiveTrue(hallId));
         }
 
         List<Stall> stalls = new ArrayList<>();
         for (CreateStallRequest req : stallRequests) {
-            String nameKey = req.getHallId() + "-" + req.getName().toLowerCase();
+            String nameKey = req.hallId() + "-" + req.name().toLowerCase();
             if (!seenNames.add(nameKey)) {
-                throw new BusinessException("Duplicate stall name in batch request: " + req.getName(),
+                throw new BusinessException("Duplicate stall name in batch request: " + req.name(),
                         ErrorCode.BUSINESS_RULE_VIOLATION);
             }
-            if (stallRepository.existsByHallIdAndName(req.getHallId(), req.getName())) {
-                throw new DuplicateResourceException("Stall already exists with name: " + req.getName(),
+            if (stallRepository.existsByHallIdAndName(req.hallId(), req.name())) {
+                throw new DuplicateResourceException("Stall already exists with name: " + req.name(),
                         ErrorCode.BUSINESS_RULE_VIOLATION);
             }
             Stall stall = stallMapper.toStallFromCreateStallRequest(req);
-            layoutGenerationService.validateSpatialConstraints(stall.getHall(), stall.getLayout(), null);
+            Hall hall = hallsById.get(req.hallId());
+            stall.setHall(hall);
+
+            layoutGenerationService.validateSpatialConstraints(hall, stall.getLayout(), null,
+                    existingStallsByHall.get(req.hallId()), existingMarkersByHall.get(req.hallId()));
+            // Note: O(n^2) overlap check, batch sizes should be kept small.
             for (Stall alreadyAdded : stalls) {
                 if (alreadyAdded.getHall().getId().equals(stall.getHall().getId()) && alreadyAdded.getLayout() != null
                         && stall.getLayout() != null) {
@@ -108,15 +134,18 @@ public class StallService {
                             stall.getLayout().getWidth(), stall.getLayout().getHeight(),
                             alreadyAdded.getLayout().getXCoord(), alreadyAdded.getLayout().getYCoord(),
                             alreadyAdded.getLayout().getWidth(), alreadyAdded.getLayout().getHeight())) {
-                        throw new IllegalStateException("Requested stalls overlap with each other: " + stall.getName()
-                                + " and " + alreadyAdded.getName());
+                        throw new BusinessException("Requested stalls overlap with each other: " + stall.getName()
+                                + " and " + alreadyAdded.getName(), ErrorCode.BUSINESS_RULE_VIOLATION);
                     }
                 }
             }
+            // Keep this hall's prefetched list current so later stalls in the same batch
+            // are checked against stalls already accepted earlier in this same request.
+            existingStallsByHall.get(req.hallId()).add(stall);
             stalls.add(stall);
         }
 
-        List<Stall> savedStalls = stallRepository.saveAll(requireNonNull(stalls));
+        List<Stall> savedStalls = stallRepository.saveAll(stalls);
 
         savedStalls.forEach(savedStall -> {
             eventPublisher.publishEvent(new StallCreatedEvent(
@@ -138,7 +167,7 @@ public class StallService {
 
         String oldStatus = stall.getActive() ? "ACTIVE" : "INACTIVE";
 
-        if (stallRequest.getActive() != null && !stallRequest.getActive() && "ACTIVE".equals(oldStatus)) {
+        if (stallRequest.active() != null && !stallRequest.active() && "ACTIVE".equals(oldStatus)) {
             validateNoActiveBookingsForStall(id, stall.getName());
         }
 
@@ -150,7 +179,7 @@ public class StallService {
 
         Stall updatedStall = stallRepository.save(stall);
 
-        if (stallRequest.getActive() != null && !(stallRequest.getActive() ? "ACTIVE" : "INACTIVE").equals(oldStatus)) {
+        if (stallRequest.active() != null && !(stallRequest.active() ? "ACTIVE" : "INACTIVE").equals(oldStatus)) {
             eventPublisher.publishEvent(new StallStatusChangedEvent(
                     requireNonNull(updatedStall.getId()),
                     requireNonNull(updatedStall.getName()),
@@ -159,19 +188,23 @@ public class StallService {
             if (!updatedStall.getActive()) {
                 eventPublisher.publishEvent(new StallDeactivatedEvent(updatedStall.getId()));
             }
+        } else {
+            // Name/layout changes don't flip active status but still affect what the hall
+            // layout view shows, so the cache must be invalidated regardless.
+            eventPublisher.publishEvent(new LayoutUpdatedEvent(updatedStall.getHall().getId()));
         }
 
         return stallMapper.toStallResponse(updatedStall);
     }
 
     @Transactional
-    public StallResponse updateStallStatus(UUID stallId, String newStatus) {
+    public StallResponse updateStallStatus(UUID stallId, com.bookfair.backend.model.enums.StallActiveStatus newStatus) {
         Stall stall = stallRepository.findById(requireNonNull(stallId))
                 .orElseThrow(
                         () -> new ResourceNotFoundException("Physical Stall not found", ErrorCode.STALL_NOT_FOUND));
 
         String oldStatus = stall.getActive() ? "ACTIVE" : "INACTIVE";
-        boolean newActive = "ACTIVE".equalsIgnoreCase(newStatus);
+        boolean newActive = newStatus == com.bookfair.backend.model.enums.StallActiveStatus.ACTIVE;
 
         if (!newActive && "ACTIVE".equals(oldStatus)) {
             validateNoActiveBookingsForStall(stallId, stall.getName());
@@ -185,7 +218,7 @@ public class StallService {
                 requireNonNull(updatedStall.getId()),
                 requireNonNull(updatedStall.getName()),
                 oldStatus,
-                requireNonNull(newStatus)));
+                requireNonNull(newStatus.name())));
 
         if (!newActive && "ACTIVE".equals(oldStatus)) {
             eventPublisher.publishEvent(new StallDeactivatedEvent(updatedStall.getId()));
@@ -195,9 +228,9 @@ public class StallService {
     }
 
     @Transactional(readOnly = true)
-    public List<StallResponse> getAvailableStalls() {
-        return stallRepository.findAllByActiveTrue().stream()
-                .map(stallMapper::toStallResponse).toList();
+    public org.springframework.data.domain.Page<StallResponse> getAvailableStalls(UUID eventId, org.springframework.data.domain.Pageable pageable) {
+        return stallRepository.findAvailableStallsByEventId(requireNonNull(eventId), pageable)
+                .map(stallMapper::toStallResponse);
     }
 
     @Transactional
@@ -208,18 +241,24 @@ public class StallService {
             stall.setActive(false);
             eventPublisher.publishEvent(new StallDeactivatedEvent(stall.getId()));
         }
-        stallRepository.saveAll(requireNonNull(stalls));
+        stallRepository.saveAll(stalls);
     }
 
     private void validateNoActiveBookingsForStall(UUID stallId, String stallName) {
-        List<EventStall> eventStalls = eventStallRepository.findByStallIdAndActiveTrue(stallId);
-        for (EventStall es : eventStalls) {
-            if (es.getStatus() == AvailabilityStatus.BOOKED || es.getStatus() == AvailabilityStatus.BLOCKED) {
-                throw new BusinessException(
-                        "Cannot deactivate stall " + stallName
-                                + " because it is currently booked or blocked in an event.",
-                        ErrorCode.BUSINESS_RULE_VIOLATION);
-            }
+        UUID venueId = stallRepository.findVenueIdByStallId(stallId)
+            .orElseThrow(() -> new ResourceNotFoundException("Stall's venue not found", ErrorCode.VENUE_NOT_FOUND));
+
+        List<Event> upcoming = eventRepository
+            .findUpcomingOrOngoingEventsForVenue(venueId, Instant.now());
+
+        if (!upcoming.isEmpty()) {
+            Event next = upcoming.get(0);
+            throw new BusinessException(
+                "Cannot deactivate stall '" + stallName 
+                + "' — event '" + next.getName() 
+                + "' is scheduled at this venue until " 
+                + next.getEndDateTime() + ".", 
+                ErrorCode.BUSINESS_RULE_VIOLATION);
         }
     }
 

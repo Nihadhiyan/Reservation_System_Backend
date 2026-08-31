@@ -1,6 +1,7 @@
 package com.bookfair.backend.dto.genre.mapper;
 
 import org.mapstruct.Mapper;
+import org.mapstruct.Mapping;
 import org.mapstruct.MappingTarget;
 
 import com.bookfair.backend.dto.config.GlobalMapperConfig;
@@ -14,8 +15,8 @@ public interface GenreMapper {
     
     GenreResponse toGenreResponse(Genre genre);
 
-    @org.mapstruct.Mapping(target = "id", ignore = true)
-    @org.mapstruct.Mapping(target = "active", constant = "true")
+    @Mapping(target = "id", ignore = true)
+    @Mapping(target = "active", constant = "true")
     Genre toGenre(CreateGenreRequest request);
 
     void updateGenreFromRequest(UpdateGenreRequest request, @MappingTarget Genre genre);

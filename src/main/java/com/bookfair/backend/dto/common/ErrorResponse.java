@@ -7,31 +7,21 @@ import org.springframework.http.HttpStatus;
 import com.bookfair.backend.exception.ErrorCode;
 import com.fasterxml.jackson.annotation.JsonInclude;
 
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
-
-@Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
 @JsonInclude(JsonInclude.Include.NON_NULL)
-public class ErrorResponse {
-    private Instant timestamp;
-    private int status;
-    private String errorMessage;
-    private ErrorCode code;
-    private Object details;
-    
+public record ErrorResponse(
+    Instant timestamp,
+    int status,
+    String errorMessage,
+    ErrorCode code,
+    Object details
+) {
     public static ErrorResponse build(HttpStatus status, String errorMessage, Object details, ErrorCode code) {
-        ErrorResponse response = new ErrorResponse();
-        response.timestamp = Instant.now();
-        response.status = status.value();
-        response.errorMessage = errorMessage;
-        response.details = details;
-        response.code = code;
-
-        return response;
+        return new ErrorResponse(
+            Instant.now(),
+            status.value(),
+            errorMessage,
+            code,
+            details
+        );
     }
 }

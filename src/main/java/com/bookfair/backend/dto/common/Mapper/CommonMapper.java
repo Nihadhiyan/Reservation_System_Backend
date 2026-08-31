@@ -3,12 +3,17 @@ package com.bookfair.backend.dto.common.Mapper;
 import java.util.List;
 
 import org.mapstruct.Mapper;
+import org.mapstruct.Mapping;
 
 import com.bookfair.backend.dto.common.LayoutMarkerDto;
 import com.bookfair.backend.dto.common.LayoutPositionDto;
 import com.bookfair.backend.dto.config.GlobalMapperConfig;
+import com.bookfair.backend.dto.layout.request.CreateLayoutMarkerRequest;
+import com.bookfair.backend.model.Building;
+import com.bookfair.backend.model.Hall;
 import com.bookfair.backend.model.LayoutMarker;
 import com.bookfair.backend.model.LayoutPosition;
+import com.bookfair.backend.model.Venue;
 
 @Mapper(config = GlobalMapperConfig.class)
 public interface CommonMapper {
@@ -22,20 +27,20 @@ public interface CommonMapper {
 
     LayoutPosition toLayoutPositionFromCoords(Integer xCoord, Integer yCoord, Integer width, Integer height);
 
-    @org.mapstruct.Mapping(target = "id", ignore = true)
-    @org.mapstruct.Mapping(target = "active", constant = "true")
-    @org.mapstruct.Mapping(target = "type", source = "request.type")
-    @org.mapstruct.Mapping(target = "label", source = "request.label")
-    @org.mapstruct.Mapping(target = "primaryMarker", source = "request.primaryMarker")
-    @org.mapstruct.Mapping(target = "layout", source = "layout")
-    @org.mapstruct.Mapping(target = "venue", source = "venue")
-    @org.mapstruct.Mapping(target = "building", source = "building")
-    @org.mapstruct.Mapping(target = "hall", source = "hall")
-    @org.mapstruct.Mapping(target = "createdBy", ignore = true)
-    @org.mapstruct.Mapping(target = "updatedBy", ignore = true)
-    @org.mapstruct.Mapping(target = "version", ignore = true)
-    @org.mapstruct.Mapping(target = "createdAt", ignore = true)
-    @org.mapstruct.Mapping(target = "updatedAt", ignore = true)
-    LayoutMarker toLayoutMarker(com.bookfair.backend.dto.layout.request.CreateLayoutMarkerRequest request, LayoutPosition layout, com.bookfair.backend.model.Venue venue, com.bookfair.backend.model.Building building, com.bookfair.backend.model.Hall hall);
+    @Mapping(target = "id", ignore = true)
+    @Mapping(target = "active", constant = "true")
+    @Mapping(target = "type", source = "request.type")
+    @Mapping(target = "label", source = "request.label")
+    @Mapping(target = "primaryMarker", source = "request.primaryMarker")
+    @Mapping(target = "layout", source = "layout")
+    @Mapping(target = "venue", source = "venue")
+    @Mapping(target = "building", source = "building")
+    @Mapping(target = "hall", source = "hall")
+    @Mapping(target = "createdBy", ignore = true)
+    @Mapping(target = "updatedBy", ignore = true)
+    @Mapping(target = "version", ignore = true)
+    @Mapping(target = "createdAt", ignore = true)
+    @Mapping(target = "updatedAt", ignore = true)
+    LayoutMarker toLayoutMarker(CreateLayoutMarkerRequest request, LayoutPosition layout, Venue venue, Building building, Hall hall);
 }
 

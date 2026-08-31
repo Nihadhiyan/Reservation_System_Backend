@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>New Organization Registered</title>
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #f4f4f4; padding: 20px; }
+        .container { background-color: #ffffff; padding: 30px; border-radius: 8px; max-width: 600px; margin: auto; }
+        .header { color: #5cb85c; font-size: 24px; font-weight: bold; margin-bottom: 20px; }
+        .content { font-size: 16px; color: #333333; line-height: 1.5; }
+        .footer { margin-top: 30px; font-size: 12px; color: #777777; text-align: center; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">New Organization Registered</div>
+        <div class="content">
+            <p>Hello <span th:text="${userName}">User</span>,</p>
+            <p><span th:text="${alertMessage}">A new organization has been registered on the platform.</span></p>
+            <p><strong>Organization Name:</strong> <span th:text="${orgName}">Organization</span></p>
+        </div>
+        <div class="footer">
+            &copy; Clausis Technologies. All rights reserved.
+        </div>
+    </div>
+</body>
+</html>

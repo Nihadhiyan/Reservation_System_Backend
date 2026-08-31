@@ -1,35 +1,26 @@
 package com.bookfair.backend.dto.layout.request;
 
 import com.bookfair.backend.dto.common.LayoutPositionDto;
-import com.bookfair.backend.model.LayoutMarker;
+import com.bookfair.backend.model.enums.FeatureType;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
 
-@Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
-public class UpdateLayoutMarkerRequest {
-
+public record UpdateLayoutMarkerRequest(
     @NotNull
-    private LayoutMarker.FeatureType type;
+    FeatureType type,
 
     @NotBlank
-    private String label;
+    String label,
 
     @NotNull
-    private Boolean primaryMarker;
+    Boolean primaryMarker,
 
     @Valid
     @NotNull
-    private LayoutPositionDto layout;
+    LayoutPositionDto layout,
 
     @NotNull
-    private Boolean active;
-}
+    Boolean active
+) {}

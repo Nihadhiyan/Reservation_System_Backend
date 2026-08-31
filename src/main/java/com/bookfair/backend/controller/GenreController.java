@@ -31,7 +31,7 @@ public class GenreController {
     private final GenreService genreService;
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('USER', 'ORG_ADMIN', 'SUPER_ADMIN')")
+    @PreAuthorize("hasAnyRole('CUSTOMER', 'ORG_ADMIN', 'SUPER_ADMIN')")
     public ResponseEntity<ApiResponseDto<List<GenreResponse>>> getAllGenres() {
         List<GenreResponse> data = genreService.getAllGenres();
         return ResponseEntity.ok(new ApiResponseDto<>(true, "Genres fetched successfully", data, Instant.now()));

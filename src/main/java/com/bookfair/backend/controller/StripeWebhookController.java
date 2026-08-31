@@ -1,5 +1,6 @@
 package com.bookfair.backend.controller;
 
+import com.bookfair.backend.exception.BaseException;
 import com.bookfair.backend.service.PaymentService;
 import com.stripe.exception.SignatureVerificationException;
 import com.stripe.net.Webhook;
@@ -43,6 +44,13 @@ public class StripeWebhookController {
         } catch (SignatureVerificationException e) {
             log.error("Invalid Stripe webhook signature.", e);
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Invalid signature");
+        } catch (BaseException e) {
+            // A business-rule/not-found failure (e.g. the reservation this webhook refers to
+            // doesn't exist) will never be fixed by Stripe retrying the same webhook — return
+            // the exception's own (4xx) status so Stripe stops retrying, instead of masking it
+            // as a 500 that triggers endless retries.
+            log.error("Business error processing Stripe webhook: {}", e.getMessage(), e);
+            return ResponseEntity.status(e.getStatus()).body(e.getMessage());
         } catch (Exception e) {
             log.error("Error processing Stripe webhook", e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Processing failed");

@@ -8,11 +8,13 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import lombok.ToString;
 
 // Implements Serializable for Redis caching compatibility
 @Embeddable
 @Getter
 @Setter
+@ToString
 @NoArgsConstructor
 @AllArgsConstructor
 public class LayoutPosition implements Serializable {
@@ -26,17 +28,11 @@ public class LayoutPosition implements Serializable {
     private Integer yCoord;
 
     @Column(nullable = false)
-    @Min(value = 0, message = "Width must be non-negative")
+    @Min(value = 1, message = "Width must be positive")
     private Integer width;
 
     @Column(nullable = false)
-    @Min(value = 0, message = "Height must be non-negative")
+    @Min(value = 1, message = "Height must be positive")
     private Integer height;
-
-    // @Column(name = "latitude", precision = 9, scale = 6)
-    // private Double latitude;
-
-    // @Column(name = "longitude", precision = 9, scale = 6)
-    // private Double longitude;
     
 }

@@ -14,6 +14,9 @@ import com.bookfair.backend.model.Event;
 import com.bookfair.backend.model.EventSettlement;
 import com.bookfair.backend.model.Reservation;
 import com.bookfair.backend.model.TransactionHistory;
+import com.bookfair.backend.model.enums.RentType;
+import com.bookfair.backend.model.enums.SettlementStatus;
+import com.bookfair.backend.model.enums.TransactionRole;
 import com.bookfair.backend.repository.EventSettlementRepository;
 import com.bookfair.backend.repository.TransactionHistoryRepository;
 
@@ -39,18 +42,18 @@ public class SettlementService {
 
         BigDecimal snapshottedRate = event.getVenue().getDailyRentRate() != null ? event.getVenue().getDailyRentRate()
                 : BigDecimal.ZERO;
-        com.bookfair.backend.model.Venue.RentType snapshottedType = event.getVenue().getRentType() != null
+        RentType snapshottedType = event.getVenue().getRentType() != null
                 ? event.getVenue().getRentType()
-                : com.bookfair.backend.model.Venue.RentType.FLAT_DAILY;
+                : RentType.FLAT_DAILY;
 
         int durationDays = (int) java.time.Duration.between(event.getStartDateTime(), event.getEndDateTime()).toDays();
         if (durationDays <= 0)
             durationDays = 1;
 
         BigDecimal totalRent = pricingEngineService.calculateVenueRent(event.getVenue(), durationDays);
-        EventSettlement.SettlementStatus status = totalRent.compareTo(BigDecimal.ZERO) == 0
-                ? EventSettlement.SettlementStatus.LIABILITY_COVERED
-                : EventSettlement.SettlementStatus.LIABILITY_PENDING;
+        SettlementStatus status = totalRent.compareTo(BigDecimal.ZERO) == 0
+                ? SettlementStatus.LIABILITY_COVERED
+                : SettlementStatus.LIABILITY_PENDING;
 
         EventSettlement settlement = settlementMapper.toEventSettlement(event, snapshottedRate, snapshottedType,
                 totalRent, status);
@@ -64,7 +67,7 @@ public class SettlementService {
 
         // 1. Log incoming transaction from Vendor to Organizer
         TransactionHistory vendorTx = settlementMapper.toTransactionHistory(
-                event, amount, TransactionHistory.TransactionRole.VENDOR, TransactionHistory.TransactionRole.ORGANIZER,
+                event, amount, TransactionRole.VENDOR, TransactionRole.ORGANIZER,
                 reservation, "Vendor payment for reservation " + reservation.getId());
         transactionHistoryRepository.save(requireNonNull(vendorTx));
 
@@ -83,8 +86,8 @@ public class SettlementService {
 
             // Log Rent Coverage transaction (Organizer -> Venue Owner)
             TransactionHistory coverageTx = settlementMapper.toTransactionHistory(
-                    event, amountToCover, TransactionHistory.TransactionRole.ORGANIZER,
-                    TransactionHistory.TransactionRole.VENUE_OWNER,
+                    event, amountToCover, TransactionRole.ORGANIZER,
+                    TransactionRole.VENUE_OWNER,
                     null, "Automatic Rent Coverage Waterfall for Event " + event.getId());
             transactionHistoryRepository.save(requireNonNull(coverageTx));
 
@@ -95,14 +98,14 @@ public class SettlementService {
 
             // Check if liability is crossed
             if (settlement.getRemainingBalance().compareTo(BigDecimal.ZERO) == 0
-                    && settlement.getStatus() == EventSettlement.SettlementStatus.LIABILITY_PENDING) {
-                settlement.setStatus(EventSettlement.SettlementStatus.LIABILITY_COVERED);
+                    && settlement.getStatus() == SettlementStatus.LIABILITY_PENDING) {
+                settlement.setStatus(SettlementStatus.LIABILITY_COVERED);
                 log.info("Audit: Liability Covered threshold crossed for Event {}", event.getId());
 
                 // Log this explicitly in TransactionHistory as an audit event
                 TransactionHistory auditTx = settlementMapper.toTransactionHistory(
-                        event, BigDecimal.ZERO, TransactionHistory.TransactionRole.PLATFORM,
-                        TransactionHistory.TransactionRole.ORGANIZER,
+                        event, BigDecimal.ZERO, TransactionRole.PLATFORM,
+                        TransactionRole.ORGANIZER,
                         null, "Liability Covered threshold crossed");
                 transactionHistoryRepository.save(requireNonNull(auditTx));
             }
@@ -110,8 +113,8 @@ public class SettlementService {
             // Rent is fully covered, 100% goes to profit
             settlement.setOrganizerProfit(settlement.getOrganizerProfit().add(amount));
 
-            if (settlement.getStatus() == EventSettlement.SettlementStatus.LIABILITY_COVERED) {
-                settlement.setStatus(EventSettlement.SettlementStatus.PROFIT_RELEASED);
+            if (settlement.getStatus() == SettlementStatus.LIABILITY_COVERED) {
+                settlement.setStatus(SettlementStatus.PROFIT_RELEASED);
             }
         }
 
@@ -123,8 +126,8 @@ public class SettlementService {
         EventSettlement settlement = settlementRepository.findByEventId(event.getId())
                 .orElseThrow(() -> new BusinessException("Settlement not found", ErrorCode.BUSINESS_RULE_VIOLATION));
 
-        if (settlement.getStatus() != EventSettlement.SettlementStatus.PROFIT_RELEASED
-                && settlement.getStatus() != EventSettlement.SettlementStatus.LIABILITY_COVERED) {
+        if (settlement.getStatus() != SettlementStatus.PROFIT_RELEASED
+                && settlement.getStatus() != SettlementStatus.LIABILITY_COVERED) {
             throw new BusinessException("Cannot withdraw funds: Liability not yet covered for Event " + event.getId(),
                     ErrorCode.BUSINESS_RULE_VIOLATION);
         }

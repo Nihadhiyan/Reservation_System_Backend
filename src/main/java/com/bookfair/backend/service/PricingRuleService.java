@@ -44,7 +44,7 @@ public class PricingRuleService {
 
     @Transactional
     public PricingRuleResponse createPricingRule(PricingRuleRequest request) {
-        pricingRuleValidator.validate(request.getConditionType(), request.getConditionValue());
+        pricingRuleValidator.validate(request.conditionType(), request.conditionValue());
 
         PricingRule rule = pricingMapper.toPricingRule(request);
         rule.setActive(true);
@@ -58,14 +58,14 @@ public class PricingRuleService {
 
     @Transactional
     public PricingRuleResponse updatePricingRule(UUID id, PricingRuleRequest request) {
-        pricingRuleValidator.validate(request.getConditionType(), request.getConditionValue());
+        pricingRuleValidator.validate(request.conditionType(), request.conditionValue());
         PricingRule rule = pricingRuleRepository.findById(requireNonNull(id))
-                .orElseThrow(() -> new ResourceNotFoundException("Pricing rule not found", ErrorCode.VALIDATION_ERROR));
-        rule.setName(request.getName());
-        rule.setDescription(request.getDescription());
-        rule.setConditionType(request.getConditionType());
-        rule.setConditionValue(request.getConditionValue());
-        rule.setMultiplier(request.getMultiplier());
+                .orElseThrow(() -> new ResourceNotFoundException("Pricing rule not found", ErrorCode.PRICING_RULE_NOT_FOUND));
+        rule.setName(request.name());
+        rule.setDescription(request.description());
+        rule.setConditionType(request.conditionType());
+        rule.setConditionValue(request.conditionValue());
+        rule.setMultiplier(request.multiplier());
 
         PricingRule saved = pricingRuleRepository.save(rule);
         eventPublisher.publishEvent(new PricingRuleUpdatedEvent(saved.getId()));
@@ -75,7 +75,7 @@ public class PricingRuleService {
     @Transactional
     public void deletePricingRule(UUID id) {
         PricingRule rule = pricingRuleRepository.findById(requireNonNull(id))
-                .orElseThrow(() -> new ResourceNotFoundException("Pricing rule not found", ErrorCode.VALIDATION_ERROR));
+                .orElseThrow(() -> new ResourceNotFoundException("Pricing rule not found", ErrorCode.PRICING_RULE_NOT_FOUND));
         rule.setActive(false);
         pricingRuleRepository.save(rule);
         eventPublisher.publishEvent(new PricingRuleUpdatedEvent(id));

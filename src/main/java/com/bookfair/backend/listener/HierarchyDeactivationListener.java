@@ -7,7 +7,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
-import com.bookfair.backend.event.cache.EventStallUpdatedEvent;
+
 import com.bookfair.backend.event.hierarchy.BuildingDeactivatedEvent;
 import com.bookfair.backend.event.hierarchy.EventDeactivatedEvent;
 import com.bookfair.backend.event.hierarchy.FloorDeactivatedEvent;
@@ -17,14 +17,17 @@ import com.bookfair.backend.event.reservation.ReservationCancelledByAdminEvent;
 import com.bookfair.backend.event.stall.StallDeactivatedEvent;
 import com.bookfair.backend.model.Building;
 import com.bookfair.backend.model.Event;
-import com.bookfair.backend.model.EventStall;
+import com.bookfair.backend.model.EventSpaceBooking;
+import com.bookfair.backend.model.enums.BookingStatus;
 import com.bookfair.backend.model.Floor;
 import com.bookfair.backend.model.Hall;
 import com.bookfair.backend.model.Reservation;
+import com.bookfair.backend.model.enums.ReservationStatus;
 import com.bookfair.backend.model.Stall;
+import com.bookfair.backend.model.enums.BookingStatus;
 import com.bookfair.backend.repository.BuildingRepository;
 import com.bookfair.backend.repository.EventRepository;
-import com.bookfair.backend.repository.EventStallRepository;
+import com.bookfair.backend.repository.EventSpaceBookingRepository;
 import com.bookfair.backend.repository.FloorRepository;
 import com.bookfair.backend.repository.HallRepository;
 import com.bookfair.backend.repository.ReservationRepository;
@@ -43,7 +46,7 @@ public class HierarchyDeactivationListener {
     private final HallRepository hallRepository;
     private final StallRepository stallRepository;
     private final EventRepository eventRepository;
-    private final EventStallRepository eventStallRepository;
+    private final EventSpaceBookingRepository bookingRepository;
     private final ReservationRepository reservationRepository;
     private final ApplicationEventPublisher eventPublisher;
 
@@ -109,46 +112,39 @@ public class HierarchyDeactivationListener {
     @TransactionalEventListener(phase = TransactionPhase.BEFORE_COMMIT)
     public void onStallDeactivated(StallDeactivatedEvent event) {
         log.info("Processing cascade deactivation for stall: {}", event.stallId());
-        List<EventStall> eventStalls = eventStallRepository.findByStallIdAndActiveTrue(event.stallId());
-        if (!eventStalls.isEmpty()) {
-            eventStalls.forEach(es -> {
-                es.setActive(false);
-                es.setStatus(EventStall.AvailabilityStatus.BLOCKED);
-                eventPublisher.publishEvent(new EventStallUpdatedEvent(es.getEvent().getId()));
-                deactivateReservationsForEventStall(es);
-            });
-            eventStallRepository.saveAll(eventStalls);
-            log.info("Deactivated {} event stalls for physical stall {}", eventStalls.size(), event.stallId());
-        }
+        // With EventSpaceBooking, stall deactivation doesn't need to mutate historical bookings.
+        // Active bookings are already prevented from existing by the service layer validations.
     }
 
     @TransactionalEventListener(phase = TransactionPhase.BEFORE_COMMIT)
     public void onEventDeactivated(EventDeactivatedEvent event) {
         log.info("Processing cascade deactivation for event: {}", event.eventId());
-        List<EventStall> eventStalls = eventStallRepository.findByEventIdAndActiveTrue(event.eventId());
-        if (!eventStalls.isEmpty()) {
-            eventStalls.forEach(es -> {
-                es.setActive(false);
-                es.setStatus(EventStall.AvailabilityStatus.BLOCKED);
-                eventPublisher.publishEvent(new EventStallUpdatedEvent(es.getEvent().getId()));
-                deactivateReservationsForEventStall(es);
+        List<EventSpaceBooking> bookings = bookingRepository.findByEventIdAndStatusIn(
+                event.eventId(), List.of(BookingStatus.PENDING, BookingStatus.CONFIRMED));
+                
+        if (!bookings.isEmpty()) {
+            bookings.forEach(b -> {
+                b.setStatus(BookingStatus.CANCELLED);
+                deactivateReservationsForBooking(b);
             });
-            eventStallRepository.saveAll(eventStalls);
-            log.info("Deactivated {} event stalls for event {}", eventStalls.size(), event.eventId());
+            bookingRepository.saveAll(bookings);
+            log.info("Deactivated {} space bookings for event {}", bookings.size(), event.eventId());
         }
     }
 
-    private void deactivateReservationsForEventStall(EventStall es) {
-        List<Reservation> activeReservations = reservationRepository.findByEventStallIdAndStatusIn(
-                es.getId(),
-                List.of(Reservation.ReservationStatus.PENDING, Reservation.ReservationStatus.CONFIRMED));
-        if (!activeReservations.isEmpty()) {
-            activeReservations.forEach(r -> {
-                r.setStatus(Reservation.ReservationStatus.CANCELLED);
-                eventPublisher.publishEvent(new ReservationCancelledByAdminEvent(r.getId(), "Administrative closure of parent venue, event, or stall"));
-            });
-            reservationRepository.saveAll(activeReservations);
-            log.info("Cancelled {} active/pending reservations for EventStall {}", activeReservations.size(), es.getId());
+    private void deactivateReservationsForBooking(EventSpaceBooking b) {
+        if (b.getReservation() != null && 
+            (b.getReservation().getStatus() == ReservationStatus.PENDING || b.getReservation().getStatus() == ReservationStatus.CONFIRMED)) {
+            
+            Reservation r = b.getReservation();
+            r.setStatus(ReservationStatus.CANCELLED);
+            String username = r.getUser() != null ? r.getUser().getUsername() : "User";
+            String email = r.getUser() != null ? r.getUser().getEmail() : null;
+            String eventName = r.getEvent() != null ? r.getEvent().getName() : "Event";
+            if (email != null) {
+                eventPublisher.publishEvent(new ReservationCancelledByAdminEvent(r.getId(), username, email, eventName, "Administrative closure of event"));
+            }
+            reservationRepository.save(r);
         }
     }
 }

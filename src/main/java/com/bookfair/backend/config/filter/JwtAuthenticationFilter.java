@@ -20,23 +20,35 @@ import com.bookfair.backend.exception.ErrorCode;
 import com.bookfair.backend.exception.UnauthorizedException;
 import com.bookfair.backend.security.JwtService;
 import com.bookfair.backend.service.TokenBlacklistService;
+import com.bookfair.backend.service.AdminService;
 
+import io.jsonwebtoken.Claims;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 @Component
-@RequiredArgsConstructor
 @Slf4j
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
     private final TokenBlacklistService tokenBlacklistService;
-    @Qualifier("handlerExceptionResolver")
     private final HandlerExceptionResolver handlerExceptionResolver;
+    private final AdminService adminService;
+
+    public JwtAuthenticationFilter(
+            JwtService jwtService,
+            TokenBlacklistService tokenBlacklistService,
+            @Qualifier("handlerExceptionResolver") HandlerExceptionResolver handlerExceptionResolver,
+            AdminService adminService
+        ) {
+        this.jwtService = jwtService;
+        this.tokenBlacklistService = tokenBlacklistService;
+        this.handlerExceptionResolver = handlerExceptionResolver;
+        this.adminService = adminService;
+    }
 
     @Override
     protected void doFilterInternal(@NonNull HttpServletRequest request, @NonNull HttpServletResponse response,
@@ -45,6 +57,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         final String authHeader = request.getHeader("Authorization");
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            log.debug("Invalid Authorization header");
+
+            if (enforceMaintenanceMode(request, response)) return;
+
             filterChain.doFilter(request, response);
             return;
         }
@@ -57,10 +73,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         Instant issuedAt = null;
 
         try {
-            jti = jwtService.extractJti(token);
-            userId = jwtService.extractUserId(token);
-            roles = jwtService.extractSystemRole(token);
-            issuedAt = jwtService.extractIssuedAt(token);
+            Claims claims = jwtService.extractAllClaims(token);
+            jti = claims.getId();
+            userId = UUID.fromString(claims.getSubject());
+            roles = claims.get("roles", String.class);
+            issuedAt = claims.getIssuedAt().toInstant();
         } catch (Exception e) {
             log.error("JWT Token cryptographic verification failed: {}", e.getMessage());
             handlerExceptionResolver.resolveException(request, response, null,
@@ -121,6 +138,28 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             }
         }
 
+        if (enforceMaintenanceMode(request, response)) return;
+
         filterChain.doFilter(request, response);
+    }
+
+    private boolean enforceMaintenanceMode(HttpServletRequest request, HttpServletResponse response) throws IOException {
+        if (adminService.isMaintenanceMode()) {
+            boolean isSuperAdmin = false;
+            var auth = SecurityContextHolder.getContext().getAuthentication();
+            if (auth != null) {
+                isSuperAdmin = auth.getAuthorities().stream()
+                        .anyMatch(a -> a.getAuthority().equals("ROLE_SUPER_ADMIN"));
+            }
+
+            // Allow public auth routes to ensure a super admin can actually log in during maintenance
+            if (!isSuperAdmin && request.getRequestURI() != null && !request.getRequestURI().contains("/auth/")) {
+                response.setStatus(HttpServletResponse.SC_SERVICE_UNAVAILABLE);
+                response.setContentType("application/json");
+                response.getWriter().write("{\"error\": \"System is under maintenance\"}");
+                return true; // Request is handled, stop filter chain
+            }
+        }
+        return false;
     }
 }

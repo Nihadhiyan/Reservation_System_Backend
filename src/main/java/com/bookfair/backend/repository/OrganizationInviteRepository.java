@@ -10,4 +10,5 @@ import java.util.UUID;
 @Repository
 public interface OrganizationInviteRepository extends JpaRepository<OrganizationInvite, UUID> {
     Optional<OrganizationInvite> findByToken(String token);
+    boolean existsByEmailAndOrganizationIdAndUsedFalseAndExpiresAtAfter(String email, UUID organizationId, java.time.Instant now);
 }

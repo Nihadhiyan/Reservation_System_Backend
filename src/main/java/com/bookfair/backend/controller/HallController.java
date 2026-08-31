@@ -13,7 +13,6 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.bookfair.backend.dto.common.ApiResponseDto;
@@ -21,7 +20,6 @@ import com.bookfair.backend.dto.hall.request.CreateHallRequest;
 import com.bookfair.backend.dto.hall.request.UpdateHallRequest;
 import com.bookfair.backend.dto.hall.response.HallLayoutResponse;
 import com.bookfair.backend.dto.hall.response.HallResponse;
-import com.bookfair.backend.dto.layout.request.GenerateStallGridRequest;
 import com.bookfair.backend.dto.stall.response.StallResponse;
 import com.bookfair.backend.service.HallService;
 
@@ -31,52 +29,47 @@ import lombok.RequiredArgsConstructor;
 @RestController
 @RequestMapping("/api/v1/halls")
 @RequiredArgsConstructor
-@PreAuthorize("hasRole('SUPER_ADMIN')")
 public class HallController {
 
     private final HallService hallService;
 
+    @PreAuthorize("hasRole('SUPER_ADMIN') or @orgAuth.isVenueOwnerAdminByFloor(authentication, #request.floorId())")
     @PostMapping
-    @ResponseStatus(HttpStatus.CREATED)
-    public ApiResponseDto<HallResponse> createHall(@Valid @RequestBody CreateHallRequest request) {
+    public org.springframework.http.ResponseEntity<ApiResponseDto<HallResponse>> createHall(@Valid @RequestBody CreateHallRequest request) {
         HallResponse data = hallService.createHall(request);
-        return new ApiResponseDto<>(true, "Hall created successfully", data, Instant.now());
+        return org.springframework.http.ResponseEntity.status(HttpStatus.CREATED).body(new ApiResponseDto<>(true, "Hall created successfully", data, Instant.now()));
     }
 
     @GetMapping("/{id}")
-    public ApiResponseDto<HallResponse> getHallById(@PathVariable UUID id) {
+    public org.springframework.http.ResponseEntity<ApiResponseDto<HallResponse>> getHallById(@PathVariable UUID id) {
         HallResponse data = hallService.getHallById(id);
-        return new ApiResponseDto<>(true, "Hall fetched successfully", data, Instant.now());
+        return org.springframework.http.ResponseEntity.ok(new ApiResponseDto<>(true, "Hall fetched successfully", data, Instant.now()));
     }
 
     @GetMapping("/{id}/layout")
-    public ApiResponseDto<HallLayoutResponse> getHallLayout(@PathVariable UUID id) {
+    public org.springframework.http.ResponseEntity<ApiResponseDto<HallLayoutResponse>> getHallLayout(@PathVariable UUID id) {
         HallLayoutResponse data = hallService.getHallLayout(id);
-        return new ApiResponseDto<>(true, "Hall layout fetched successfully", data, Instant.now());
+        return org.springframework.http.ResponseEntity.ok(new ApiResponseDto<>(true, "Hall layout fetched successfully", data, Instant.now()));
     }
 
+    @PreAuthorize("hasRole('SUPER_ADMIN') or @orgAuth.isVenueOwnerAdminByHall(authentication, #id)")
     @PutMapping("/{id}")
-    public ApiResponseDto<HallResponse> updateHall(@PathVariable UUID id, @Valid @RequestBody UpdateHallRequest request) {
+    public org.springframework.http.ResponseEntity<ApiResponseDto<HallResponse>> updateHall(@PathVariable UUID id, @Valid @RequestBody UpdateHallRequest request) {
         HallResponse data = hallService.updateHall(id, request);
-        return new ApiResponseDto<>(true, "Hall updated successfully", data, Instant.now());
+        return org.springframework.http.ResponseEntity.ok(new ApiResponseDto<>(true, "Hall updated successfully", data, Instant.now()));
     }
 
+    @PreAuthorize("hasRole('SUPER_ADMIN') or @orgAuth.isVenueOwnerAdminByHall(authentication, #id)")
     @DeleteMapping("/{id}")
-    public ApiResponseDto<Void> deleteHall(@PathVariable UUID id) {
+    public org.springframework.http.ResponseEntity<ApiResponseDto<Void>> deleteHall(@PathVariable UUID id) {
         hallService.deleteHall(id);
-        return new ApiResponseDto<>(true, "Hall deleted successfully", null, Instant.now());
+        return org.springframework.http.ResponseEntity.ok(new ApiResponseDto<>(true, "Hall deactivated successfully", null, Instant.now()));
     }
 
     @GetMapping("/{id}/stalls")
-    public ApiResponseDto<List<StallResponse>> getStallsByHall(@PathVariable UUID id) {
+    public org.springframework.http.ResponseEntity<ApiResponseDto<List<StallResponse>>> getStallsByHall(@PathVariable UUID id) {
         List<StallResponse> data = hallService.getStallsByHall(id);
-        return new ApiResponseDto<>(true, "Stalls fetched successfully", data, Instant.now());
+        return org.springframework.http.ResponseEntity.ok(new ApiResponseDto<>(true, "Stalls fetched successfully", data, Instant.now()));
     }
 
-    @PostMapping("/{id}/generate")
-    @ResponseStatus(HttpStatus.CREATED)
-    public ApiResponseDto<List<StallResponse>> generateStallGrid(@PathVariable UUID id, @Valid @RequestBody GenerateStallGridRequest request) {
-        List<StallResponse> data = hallService.generateStallGrid(id, request);
-        return new ApiResponseDto<>(true, "Stall grid generated successfully", data, Instant.now());
-    }
 }

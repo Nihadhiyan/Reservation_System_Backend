@@ -6,7 +6,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
 import com.bookfair.backend.model.User;
-import com.bookfair.backend.model.User.SystemRole;
+import com.bookfair.backend.model.enums.SystemRole;
 
 import java.util.List;
 import java.util.Optional;
@@ -34,4 +34,5 @@ public interface UserRepository extends JpaRepository<User, UUID> {
         long countBySystemRoleAndActiveTrue(SystemRole systemRole);
 
         List<User> findBySystemRole(SystemRole systemRole);
+
 }

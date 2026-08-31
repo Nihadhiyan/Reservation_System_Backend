@@ -1,7 +1,9 @@
 package com.bookfair.backend.model;
 
+import java.math.BigDecimal;
 import java.util.List;
-import java.util.UUID;
+
+import com.bookfair.backend.model.enums.BuildingType;
 
 
 import jakarta.persistence.AttributeOverride;
@@ -13,18 +15,19 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
 import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.OrderBy;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Min;
-import lombok.AllArgsConstructor;
+import jakarta.validation.constraints.NotBlank;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -45,15 +48,12 @@ import lombok.ToString;
 )
 @Getter
 @Setter
-@AllArgsConstructor
+@ToString
 @NoArgsConstructor
 public class Building extends BaseEntity {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    private UUID id;
-
     @Column(nullable = false)
+    @NotBlank(message = "Building name is required")
     private String name;
 
     @Embedded
@@ -63,6 +63,7 @@ public class Building extends BaseEntity {
         @AttributeOverride(name = "width", column = @Column(name = "building_width")),
         @AttributeOverride(name = "height", column = @Column(name = "building_height"))
     })
+    @Valid
     private LayoutPosition layoutPosition;
 
     @OneToMany(mappedBy = "building", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
@@ -70,9 +71,13 @@ public class Building extends BaseEntity {
     @EqualsAndHashCode.Exclude
     private List<LayoutMarker> markers;
 
-    @Column(name = "square_footage")
+    @Column(name = "square_footage", nullable = false)
     @Min(value = 0, message = "Square footage must be non-negative")
-    private double squareFootage ;
+    private Double squareFootage;
+
+    @Column(name = "daily_rate", precision = 10, scale = 2)
+    @DecimalMin(value = "0.0", inclusive = true, message = "Daily rate must be non-negative")
+    private BigDecimal dailyRate;
 
     @Column(name = "active", nullable = false)
     private Boolean active = true;
@@ -93,10 +98,11 @@ public class Building extends BaseEntity {
     @EqualsAndHashCode.Exclude
     private Venue venue;
 
-
-    public enum BuildingType {
-        INDOOR, 
-        OUTDOOR, 
-        HYBRID
+    @PrePersist
+    @PreUpdate
+    private void validateOutdoorFloorLimit() {
+        if (type == BuildingType.OUTDOOR && floors != null && floors.size() > 1) {
+            throw new IllegalStateException("Architectural Error: An OUTDOOR space cannot have more than one floor/level.");
+        }
     }
 }

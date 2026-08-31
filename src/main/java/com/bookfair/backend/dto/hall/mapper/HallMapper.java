@@ -1,6 +1,7 @@
 package com.bookfair.backend.dto.hall.mapper;
 
 import org.mapstruct.Mapper;
+import org.mapstruct.Mapping;
 import org.mapstruct.MappingTarget;
 
 import com.bookfair.backend.dto.common.Mapper.CommonMapper;
@@ -9,6 +10,7 @@ import com.bookfair.backend.dto.hall.request.CreateHallRequest;
 import com.bookfair.backend.dto.hall.request.UpdateHallRequest;
 import com.bookfair.backend.dto.hall.response.HallLayoutResponse;
 import com.bookfair.backend.dto.hall.response.HallResponse;
+import com.bookfair.backend.model.Floor;
 import com.bookfair.backend.model.Hall;
 
 @Mapper(
@@ -24,18 +26,18 @@ public interface HallMapper {
 
     Hall UpdateHallFromHallRequest(UpdateHallRequest request, @MappingTarget Hall hall);
 
-    @org.mapstruct.Mapping(target = "id", ignore = true)
-    @org.mapstruct.Mapping(target = "active", constant = "true")
-    @org.mapstruct.Mapping(target = "floor", source = "floor")
-    @org.mapstruct.Mapping(target = "layout", source = "request.layout")
-    @org.mapstruct.Mapping(target = "name", source = "request.name")
-    @org.mapstruct.Mapping(target = "spaceCategory", source = "request.spaceCategory")
-    @org.mapstruct.Mapping(target = "hallType", source = "request.hallType")
-    @org.mapstruct.Mapping(target = "blueprintImageUrl", source = "request.blueprintImageUrl")
-    @org.mapstruct.Mapping(target = "squareFootage", source = "request.squareFootage")
-    @org.mapstruct.Mapping(target = "maxStalls", source = "request.maxStalls")
-    @org.mapstruct.Mapping(target = "wifiAvailable", source = "request.wifiAvailable")
-    @org.mapstruct.Mapping(target = "airConditioned", source = "request.airConditioned")
-    Hall toHall(CreateHallRequest request, com.bookfair.backend.model.Floor floor);
+    @Mapping(target = "id", ignore = true)
+    @Mapping(target = "active", constant = "true")
+    @Mapping(target = "floor", source = "floor")
+    @Mapping(target = "layout", source = "request.layout")
+    @Mapping(target = "name", source = "request.name")
+    @Mapping(target = "spaceCategory", source = "request.spaceCategory")
+    @Mapping(target = "hallType", source = "request.hallType")
+    @Mapping(target = "blueprintImageUrl", source = "request.blueprintImageUrl")
+    @Mapping(target = "squareFootage", source = "request.squareFootage")
+    @Mapping(target = "maxStalls", source = "request.maxStalls")
+    @Mapping(target = "wifiAvailable", source = "request.wifiAvailable")
+    @Mapping(target = "airConditioned", source = "request.airConditioned")
+    Hall toHall(CreateHallRequest request, Floor floor);
 }
 

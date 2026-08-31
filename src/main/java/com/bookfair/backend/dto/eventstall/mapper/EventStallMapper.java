@@ -15,7 +15,7 @@ public interface EventStallMapper {
         expression = "java(eventStall.getEffectiveName())")
     @Mapping(target = "originalStallName", source = "stall.name")
     @Mapping(target = "effectiveLayout",
-        expression = "java(eventStall.getEffectiveLayout() != null ? new com.bookfair.backend.dto.common.LayoutPositionDto(eventStall.getEffectiveLayout().getX(), eventStall.getEffectiveLayout().getY(), eventStall.getEffectiveLayout().getWidth(), eventStall.getEffectiveLayout().getLength(), eventStall.getEffectiveLayout().getRotation()) : null)")
+        expression = "java(eventStall.getEffectiveLayout() != null ? new com.bookfair.backend.dto.common.LayoutPositionDto(eventStall.getEffectiveLayout().getXCoord(), eventStall.getEffectiveLayout().getYCoord(), eventStall.getEffectiveLayout().getWidth(), eventStall.getEffectiveLayout().getHeight()) : null)")
     @Mapping(target = "isRepositioned",
         expression = "java(eventStall.getCustomLayout() != null)")
     @Mapping(target = "hallName", source = "stall.hall.name")

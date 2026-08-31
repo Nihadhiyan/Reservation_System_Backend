@@ -1,4 +1,4 @@
-package com.bookfair.backend.model;
+package com.bookfair.backend.model.enums;
 
 public enum OrganizationRole {
     ORG_ADMIN,

@@ -41,11 +41,11 @@ public class LayoutMarkerService {
     public LayoutMarkerDto createLayoutMarker(CreateLayoutMarkerRequest request) {
         requireNonNull(request, "request cannot be null");
         int parentCount = 0;
-        if (request.getVenueId() != null)
+        if (request.venueId() != null)
             parentCount++;
-        if (request.getBuildingId() != null)
+        if (request.buildingId() != null)
             parentCount++;
-        if (request.getHallId() != null)
+        if (request.hallId() != null)
             parentCount++;
 
         if (parentCount != 1) {
@@ -53,23 +53,23 @@ public class LayoutMarkerService {
                     ErrorCode.BUSINESS_RULE_VIOLATION);
         }
 
-        LayoutPosition layout = commonMapper.toLayoutPosition(request.getLayout());
+        LayoutPosition layout = commonMapper.toLayoutPosition(request.layout());
 
         Venue venue = null;
-        if (request.getVenueId() != null) {
-            venue = venueRepository.findById(requireNonNull(request.getVenueId()))
+        if (request.venueId() != null) {
+            venue = venueRepository.findById(requireNonNull(request.venueId()))
                     .orElseThrow(() -> new ResourceNotFoundException("Venue not found", ErrorCode.VENUE_NOT_FOUND));
         }
 
         Building building = null;
-        if (request.getBuildingId() != null) {
-            building = buildingRepository.findById(requireNonNull(request.getBuildingId()))
-                    .orElseThrow(() -> new ResourceNotFoundException("Building not found", ErrorCode.VENUE_NOT_FOUND));
+        if (request.buildingId() != null) {
+            building = buildingRepository.findById(requireNonNull(request.buildingId()))
+                    .orElseThrow(() -> new ResourceNotFoundException("Building not found", ErrorCode.BUILDING_NOT_FOUND));
         }
 
         Hall hall = null;
-        if (request.getHallId() != null) {
-            hall = hallRepository.findById(requireNonNull(request.getHallId()))
+        if (request.hallId() != null) {
+            hall = hallRepository.findById(requireNonNull(request.hallId()))
                     .orElseThrow(() -> new ResourceNotFoundException("Hall not found", ErrorCode.HALL_NOT_FOUND));
         }
 
@@ -83,14 +83,14 @@ public class LayoutMarkerService {
     public LayoutMarkerDto updateLayoutMarker(UUID id, UpdateLayoutMarkerRequest request) {
         requireNonNull(request, "request cannot be null");
         LayoutMarker marker = layoutMarkerRepository.findById(requireNonNull(id))
-                .orElseThrow(() -> new ResourceNotFoundException("Layout marker not found", ErrorCode.HALL_NOT_FOUND));
+                .orElseThrow(() -> new ResourceNotFoundException("Layout marker not found", ErrorCode.LAYOUT_MARKER_NOT_FOUND));
 
-        marker.setType(request.getType());
-        marker.setLabel(request.getLabel());
-        marker.setPrimaryMarker(request.getPrimaryMarker());
-        marker.setActive(request.getActive());
+        marker.setType(request.type());
+        marker.setLabel(request.label());
+        marker.setPrimaryMarker(request.primaryMarker());
+        marker.setActive(request.active());
 
-        LayoutPosition layout = commonMapper.toLayoutPosition(request.getLayout());
+        LayoutPosition layout = commonMapper.toLayoutPosition(request.layout());
         marker.setLayout(layout);
 
         LayoutMarker saved = layoutMarkerRepository.save(marker);
@@ -100,7 +100,7 @@ public class LayoutMarkerService {
     @Transactional
     public void deleteLayoutMarker(UUID id) {
         LayoutMarker marker = layoutMarkerRepository.findById(requireNonNull(id))
-                .orElseThrow(() -> new ResourceNotFoundException("Layout marker not found", ErrorCode.HALL_NOT_FOUND));
+                .orElseThrow(() -> new ResourceNotFoundException("Layout marker not found", ErrorCode.LAYOUT_MARKER_NOT_FOUND));
 
         marker.setActive(false);
         layoutMarkerRepository.save(marker);

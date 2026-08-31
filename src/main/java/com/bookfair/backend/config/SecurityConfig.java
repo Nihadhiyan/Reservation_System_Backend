@@ -8,15 +8,18 @@ import org.springframework.security.config.annotation.method.configuration.Enabl
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
+import com.bookfair.backend.config.filter.IpBlastShieldFilter;
 import com.bookfair.backend.config.filter.JwtAuthenticationFilter;
-import com.bookfair.backend.config.filter.RateLimitingFilter;
+import com.bookfair.backend.config.filter.UserQuotaFilter;
 import com.bookfair.backend.security.JwtAuthEntryPoint;
 
+import jakarta.annotation.PostConstruct;
 import lombok.AllArgsConstructor;
 
 @Configuration
@@ -27,7 +30,8 @@ public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtFilter;
     private final JwtAuthEntryPoint authEntryPoint;
-    private final RateLimitingFilter rateLimitingFilter;
+    private final IpBlastShieldFilter ipBlastShieldFilter;
+    private final UserQuotaFilter userQuotaFilter;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -43,9 +47,20 @@ public class SecurityConfig {
                         .requestMatchers("/actuator/**").hasRole("SUPER_ADMIN")
                         .anyRequest().authenticated())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class)
-                .addFilterAfter(rateLimitingFilter, JwtAuthenticationFilter.class)
+                .addFilterBefore(ipBlastShieldFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterAfter(jwtFilter, IpBlastShieldFilter.class)
+                .addFilterAfter(userQuotaFilter, JwtAuthenticationFilter.class)
                 .build();
+    }
+
+    // This was previously defined but never invoked, so @Async threads never actually
+    // inherited the caller's SecurityContext. Wiring it at startup so any current or
+    // future @Async code that reads SecurityContextHolder behaves as originally intended.
+    @PostConstruct
+    public void enableAuthForwarding() {
+        // This tells Spring: "When you spawn an Async thread, copy the User's ID into
+        // it!"
+        SecurityContextHolder.setStrategyName((SecurityContextHolder.MODE_INHERITABLETHREADLOCAL));
     }
 
     @Bean

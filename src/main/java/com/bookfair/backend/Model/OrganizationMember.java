@@ -1,34 +1,43 @@
 package com.bookfair.backend.model;
 
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
+import com.bookfair.backend.model.enums.OrganizationRole;
+
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-
-import java.util.UUID;
+import lombok.ToString;
 
 @Entity
-@Table(name = "organization_members", indexes = {
+@Table(name = "organization_members",
+    indexes = {
         @Index(name = "idx_org_member_user", columnList = "user_id"),
         @Index(name = "idx_org_member_org", columnList = "organization_id")
-})
+    },
+    uniqueConstraints = {
+        @UniqueConstraint(
+            name = "uk_org_member_user_org",
+            columnNames = {"user_id", "organization_id"}
+        )
+    }
+)
 @Getter
 @Setter
+@ToString
 @NoArgsConstructor
-@AllArgsConstructor
 public class OrganizationMember extends BaseEntity {
-
-    @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    private UUID id;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "user_id", nullable = false)
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
     private User user;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "organization_id", nullable = false)
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
     private Organization organization;
 
     @Enumerated(EnumType.STRING)
@@ -37,9 +46,4 @@ public class OrganizationMember extends BaseEntity {
 
     @Column(name = "active", nullable = false)
     private Boolean active = true;
-
-    public enum OrganizationRole {
-        ORG_ADMIN,
-        ORG_MEMBER
-    }
 }

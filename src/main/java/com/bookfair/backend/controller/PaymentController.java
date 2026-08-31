@@ -29,23 +29,20 @@ public class PaymentController {
     private final PaymentService paymentService;
 
     @PostMapping("/initialize")
-    @PreAuthorize("hasAnyRole('USER', 'ORG_ADMIN', 'SUPER_ADMIN')")
+    @PreAuthorize("hasAnyRole('CUSTOMER', 'ORG_ADMIN', 'SUPER_ADMIN')")
     public ResponseEntity<ApiResponseDto<PaymentResponse>> initializePayment(@Valid @RequestBody CreatePaymentRequest request) {
         PaymentResponse data = paymentService.initializePayment(request, "STRIPE");
         return ResponseEntity.status(HttpStatus.CREATED).body(new ApiResponseDto<>(true, "Payment initialized successfully", data, Instant.now()));
     }
 
-    @PostMapping("/webhook")
-    @PreAuthorize("permitAll()")
-    public ResponseEntity<Void> processWebhook(@RequestBody String payload, @org.springframework.web.bind.annotation.RequestHeader("Stripe-Signature") String signature) {
-        paymentService.processWebhook(payload, signature, "STRIPE");
-        return ResponseEntity.ok().build();
-    }
+    // Webhook handling lives solely in StripeWebhookController (/api/payments/webhook) —
+    // having two endpoints call into PaymentService.processWebhook risked duplicate
+    // processing if both were ever registered with Stripe.
 
-    @GetMapping("/{transactionId}/status")
-    @PreAuthorize("hasAnyRole('USER', 'ORG_ADMIN', 'SUPER_ADMIN')")
-    public ResponseEntity<ApiResponseDto<PaymentResponse>> getPaymentStatus(@PathVariable UUID transactionId) {
-        PaymentResponse data = paymentService.getPaymentStatus(transactionId);
+    @GetMapping("/{paymentId}/status")
+    @PreAuthorize("hasAnyRole('CUSTOMER', 'ORG_ADMIN', 'SUPER_ADMIN')")
+    public ResponseEntity<ApiResponseDto<PaymentResponse>> getPaymentStatus(@PathVariable UUID paymentId) {
+        PaymentResponse data = paymentService.getPaymentStatus(paymentId);
         return ResponseEntity.ok(new ApiResponseDto<>(true, "Payment status fetched successfully", data, Instant.now()));
     }
 }

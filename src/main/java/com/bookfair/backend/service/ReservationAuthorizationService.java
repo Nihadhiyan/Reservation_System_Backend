@@ -3,8 +3,8 @@ package com.bookfair.backend.service;
 import org.springframework.stereotype.Service;
 
 import com.bookfair.backend.model.Reservation;
-import com.bookfair.backend.model.User.SystemRole;
-import com.bookfair.backend.model.OrganizationMember.OrganizationRole;
+import com.bookfair.backend.model.enums.SystemRole;
+import com.bookfair.backend.model.enums.OrganizationRole;
 import com.bookfair.backend.model.OrganizationMember;
 import com.bookfair.backend.model.User;
 import com.bookfair.backend.repository.OrganizationMemberRepository;

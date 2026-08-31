@@ -1,18 +1,29 @@
 package com.bookfair.backend.dto.organization.mapper;
 
+import java.time.Instant;
+
 import org.mapstruct.Mapper;
+import org.mapstruct.Mapping;
 import org.mapstruct.MappingTarget;
 
 import com.bookfair.backend.dto.common.SimpleOrganizationDto;
 import com.bookfair.backend.dto.config.GlobalMapperConfig;
 import com.bookfair.backend.dto.organization.request.CreateOrganizationRequest;
+import com.bookfair.backend.dto.organization.request.InviteRequest;
 import com.bookfair.backend.dto.organization.request.UpdateOrganizationRequest;
 import com.bookfair.backend.dto.organization.response.OrganizationResponse;
+import com.bookfair.backend.dto.organization.response.PublicOrganizationResponse;
 import com.bookfair.backend.model.Organization;
+import com.bookfair.backend.model.OrganizationInvite;
+import com.bookfair.backend.model.OrganizationMember;
+import com.bookfair.backend.model.User;
+import com.bookfair.backend.model.enums.OrganizationRole;
 
 @Mapper(config = GlobalMapperConfig.class)
 public interface OrganizationMapper {
     OrganizationResponse toOrganizationResponse(Organization organization);
+
+    PublicOrganizationResponse toPublicOrganizationResponse(Organization organization);
 
     SimpleOrganizationDto toSimpleOrganizationDto(Organization organization);
 
@@ -20,34 +31,50 @@ public interface OrganizationMapper {
 
     Organization updateOrganizationFromOrganizationRequest(UpdateOrganizationRequest request, @MappingTarget Organization organization);
 
-    @org.mapstruct.Mapping(target = "id", ignore = true)
-    @org.mapstruct.Mapping(target = "active", constant = "true")
-    @org.mapstruct.Mapping(target = "name", source = "organizationName")
-    @org.mapstruct.Mapping(target = "capabilities", source = "organizationCapabilities")
-    @org.mapstruct.Mapping(target = "contactNumber", source = "contactNumber")
-    @org.mapstruct.Mapping(target = "billingAddress", source = "address")
-    @org.mapstruct.Mapping(target = "contactEmail", source = "email")
-    Organization toOrganizationFromRegisterRequest(com.bookfair.backend.dto.auth.request.RegisterRequest registerRequest);
+    @Mapping(target = "id", ignore = true)
+    @Mapping(target = "active", constant = "true")
+    @Mapping(target = "verified", constant = "false")
+    @Mapping(target = "name", source = "dto.name")
+    @Mapping(target = "capabilities", source = "dto.capabilities")
+    @Mapping(target = "contactNumber", source = "dto.contactNumber")
+    @Mapping(target = "billingAddress", source = "dto.billingAddress")
+    @Mapping(target = "contactEmail", source = "dto.contactEmail")
+    @Mapping(target = "registrationNumber", source = "dto.registrationNumber")
+    @Mapping(target = "employees", ignore = true)
+    @Mapping(target = "ownedVenues", ignore = true)
+    @Mapping(target = "partnerVenues", ignore = true)
+    @Mapping(target = "deletionAudit", ignore = true)
+    @Mapping(target = "version", ignore = true)
+    @Mapping(target = "createdAt", ignore = true)
+    @Mapping(target = "updatedAt", ignore = true)
+    @Mapping(target = "createdBy", ignore = true)
+    @Mapping(target = "updatedBy", ignore = true)
+    Organization toOrganizationFromRegisterRequest(CreateOrganizationRequest dto);
 
-    @org.mapstruct.Mapping(target = "id", ignore = true)
-    @org.mapstruct.Mapping(target = "user", source = "user")
-    @org.mapstruct.Mapping(target = "organization", source = "organization")
-    @org.mapstruct.Mapping(target = "role", source = "role")
-    @org.mapstruct.Mapping(target = "version", ignore = true)
-    @org.mapstruct.Mapping(target = "createdAt", ignore = true)
-    @org.mapstruct.Mapping(target = "updatedAt", ignore = true)
-    @org.mapstruct.Mapping(target = "createdBy", ignore = true)
-    @org.mapstruct.Mapping(target = "updatedBy", ignore = true)
-    @org.mapstruct.Mapping(target = "active", ignore = true)
-    com.bookfair.backend.model.OrganizationMember toOrganizationMember(com.bookfair.backend.model.User user, Organization organization, com.bookfair.backend.model.OrganizationMember.OrganizationRole role);
+    @Mapping(target = "id", ignore = true)
+    @Mapping(target = "user", source = "user")
+    @Mapping(target = "organization", source = "organization")
+    @Mapping(target = "role", source = "role")
+    @Mapping(target = "version", ignore = true)
+    @Mapping(target = "createdAt", ignore = true)
+    @Mapping(target = "updatedAt", ignore = true)
+    @Mapping(target = "createdBy", ignore = true)
+    @Mapping(target = "updatedBy", ignore = true)
+    @Mapping(target = "active", constant = "true")
+    OrganizationMember toOrganizationMember(User user, Organization organization, OrganizationRole role);
 
-    @org.mapstruct.Mapping(target = "id", ignore = true)
-    @org.mapstruct.Mapping(target = "used", constant = "false")
-    @org.mapstruct.Mapping(target = "organizationId", source = "organizationId")
-    @org.mapstruct.Mapping(target = "email", source = "request.email")
-    @org.mapstruct.Mapping(target = "assignedRole", source = "request.role")
-    @org.mapstruct.Mapping(target = "token", source = "token")
-    @org.mapstruct.Mapping(target = "expiresAt", source = "expiresAt")
-    com.bookfair.backend.model.OrganizationInvite toOrganizationInvite(java.util.UUID organizationId, com.bookfair.backend.dto.organization.request.InviteRequest request, String token, java.time.Instant expiresAt);
+    @Mapping(target = "id", ignore = true)
+    @Mapping(target = "used", constant = "false")
+    @Mapping(target = "organization", source = "organization")
+    @Mapping(target = "email", source = "request.email")
+    @Mapping(target = "assignedRole", source = "request.role")
+    @Mapping(target = "token", source = "token")
+    @Mapping(target = "expiresAt", source = "expiresAt")
+    @Mapping(target = "version", ignore = true)
+    @Mapping(target = "createdAt", ignore = true)
+    @Mapping(target = "updatedAt", ignore = true)
+    @Mapping(target = "createdBy", ignore = true)
+    @Mapping(target = "updatedBy", ignore = true)
+    OrganizationInvite toOrganizationInvite(Organization organization, InviteRequest request, String token, Instant expiresAt);
 }
 

@@ -4,10 +4,11 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -36,14 +37,14 @@ public class StallController {
     private final StallService stallService;
 
     @GetMapping("/hall/{hallId}")
-    @PreAuthorize("hasAnyRole('USER', 'ORG_ADMIN', 'SUPER_ADMIN')")
+    @PreAuthorize("hasAnyRole('CUSTOMER', 'ORG_ADMIN', 'SUPER_ADMIN')")
     public ResponseEntity<ApiResponseDto<List<StallResponse>>> getStallsByHall(@PathVariable UUID hallId) {
         List<StallResponse> data = stallService.getAllStallsForHall(hallId);
         return ResponseEntity.ok(new ApiResponseDto<>(true, "Stalls fetched successfully", data, Instant.now()));
     }
 
     @GetMapping("/{stallId}")
-    @PreAuthorize("hasAnyRole('USER', 'ORG_ADMIN', 'SUPER_ADMIN')")
+    @PreAuthorize("hasAnyRole('CUSTOMER', 'ORG_ADMIN', 'SUPER_ADMIN')")
     public ResponseEntity<ApiResponseDto<StallResponse>> getStallById(@PathVariable UUID stallId) {
         StallResponse data = stallService.getStallById(stallId);
         return ResponseEntity.ok(new ApiResponseDto<>(true, "Stall fetched successfully", data, Instant.now()));
@@ -51,9 +52,8 @@ public class StallController {
 
     @PostMapping
     @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ORG_ADMIN')")
-    public ResponseEntity<ApiResponseDto<List<StallResponse>>> createStalls(@Valid @RequestBody List<CreateStallRequest> requests, Authentication authentication) {
-        String currentUser = (authentication != null) ? authentication.getName() : "system";
-        List<StallResponse> createdStalls = stallService.createStalls(requests, currentUser);
+    public ResponseEntity<ApiResponseDto<List<StallResponse>>> createStalls(@Valid @RequestBody List<CreateStallRequest> requests) {
+        List<StallResponse> createdStalls = stallService.createStalls(requests);
         return ResponseEntity.status(HttpStatus.CREATED).body(new ApiResponseDto<>(true, "Stalls created successfully", createdStalls, Instant.now()));
     }
 
@@ -68,22 +68,24 @@ public class StallController {
     @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ORG_ADMIN')")
     public ResponseEntity<ApiResponseDto<StallResponse>> updateStallStatus(
             @PathVariable UUID stallId, 
-            @RequestParam String status) {
+            @RequestParam com.bookfair.backend.model.enums.StallActiveStatus status) {
         StallResponse data = stallService.updateStallStatus(stallId, status);
         return ResponseEntity.ok(new ApiResponseDto<>(true, "Stall status updated successfully", data, Instant.now()));
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ORG_ADMIN')")
     public ResponseEntity<ApiResponseDto<Void>> deactivateStall(@PathVariable UUID id) {
         stallService.deactivateStall(List.of(id));
         return ResponseEntity.ok(new ApiResponseDto<>(true, "Stall deactivated successfully", null, Instant.now()));
     }
 
     @GetMapping("/available")
-    @PreAuthorize("permitAll()")
-    public ResponseEntity<ApiResponseDto<List<StallResponse>>> getAvailableStalls() {
-        List<StallResponse> data = stallService.getAvailableStalls();
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<ApiResponseDto<Page<StallResponse>>> getAvailableStalls(
+            @RequestParam UUID eventId,
+            @org.springframework.data.web.PageableDefault(size = 20, sort = "name") Pageable pageable) {
+        Page<StallResponse> data = stallService.getAvailableStalls(eventId, pageable);
         return ResponseEntity.ok(new ApiResponseDto<>(true, "Available stalls fetched successfully", data, Instant.now()));
     }
 }

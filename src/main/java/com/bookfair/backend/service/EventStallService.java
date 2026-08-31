@@ -39,10 +39,12 @@ public class EventStallService {
     @Transactional
     public void generateEventStallsForEvent(UUID eventId, List<Stall> stalls) {
         // Filter out stalls that already have EventStall records
-        // (prevents duplicates if called multiple times)
+        // (prevents duplicates if called multiple times) — single bulk lookup
+        // instead of one existence query per stall.
+        java.util.Set<UUID> existingStallIds = new java.util.HashSet<>(
+            eventStallRepository.findExistingStallIds(eventId, stalls.stream().map(Stall::getId).toList()));
         List<Stall> newStalls = stalls.stream()
-            .filter(s -> !eventStallRepository
-                .existsByEventIdAndStallId(eventId, s.getId()))
+            .filter(s -> !existingStallIds.contains(s.getId()))
             .toList();
 
         Event event = eventRepository.findById(eventId)
@@ -95,7 +97,7 @@ public class EventStallService {
                 request.activeForEvent() != null ? request.activeForEvent() : true)
             .availabilityStatus(AvailabilityStatus.AVAILABLE)
             .customLayout(request.customLayout() != null
-                ? new com.bookfair.backend.model.embedded.LayoutPosition(request.customLayout().x(), request.customLayout().y(), request.customLayout().width(), request.customLayout().length(), request.customLayout().rotation()) : null)
+                ? new com.bookfair.backend.model.LayoutPosition(request.customLayout().xCoord(), request.customLayout().yCoord(), request.customLayout().width(), request.customLayout().height()) : null)
             .customName(request.customName())
             .eventPrice(request.eventPrice())
             .build();
@@ -149,7 +151,7 @@ public class EventStallService {
             // Validate new position doesn't overlap other stalls in this event
             validateNoOverlapWithOtherEventStalls(eventId, stallId, request.customLayout());
             eventStall.setCustomLayout(
-                new com.bookfair.backend.model.embedded.LayoutPosition(request.customLayout().x(), request.customLayout().y(), request.customLayout().width(), request.customLayout().length(), request.customLayout().rotation()));
+                new com.bookfair.backend.model.LayoutPosition(request.customLayout().xCoord(), request.customLayout().yCoord(), request.customLayout().width(), request.customLayout().height()));
         }
 
         if (request.customName() != null) {
@@ -211,7 +213,8 @@ public class EventStallService {
         // Get stall's hall
         EventStall current = eventStallRepository
             .findByEventIdAndStallId(eventId, currentStallId)
-            .orElseThrow();
+            .orElseThrow(() -> new ResourceNotFoundException(
+                "EventStall not found for this event and stall", ErrorCode.STALL_NOT_FOUND));
 
         UUID hallId = current.getStall().getHall().getId();
 
@@ -222,14 +225,14 @@ public class EventStallService {
             .toList();
 
         for (EventStall other : others) {
-            com.bookfair.backend.model.embedded.LayoutPosition otherLayout = other.getEffectiveLayout();
+            com.bookfair.backend.model.LayoutPosition otherLayout = other.getEffectiveLayout();
             if (otherLayout == null) continue;
 
             if (rectanglesOverlap(
-                    newLayout.x(), newLayout.y(),
-                    newLayout.width(), newLayout.length(),
-                    otherLayout.getX(), otherLayout.getY(),
-                    otherLayout.getWidth(), otherLayout.getLength())) {
+                    newLayout.xCoord(), newLayout.yCoord(),
+                    newLayout.width(), newLayout.height(),
+                    otherLayout.getXCoord(), otherLayout.getYCoord(),
+                    otherLayout.getWidth(), otherLayout.getHeight())) {
                 throw new BusinessException(
                     "New position overlaps with stall '"
                     + other.getEffectiveName() + "'.",

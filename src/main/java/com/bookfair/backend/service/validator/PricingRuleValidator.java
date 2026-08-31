@@ -5,7 +5,7 @@ import org.springframework.stereotype.Component;
 
 import com.bookfair.backend.exception.BusinessException;
 import com.bookfair.backend.exception.ErrorCode;
-import com.bookfair.backend.model.PricingRule.ConditionType;
+import com.bookfair.backend.model.enums.ConditionType;
 
 @Component
 public class PricingRuleValidator {
