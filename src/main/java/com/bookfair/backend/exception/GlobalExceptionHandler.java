@@ -1,10 +1,13 @@
 package com.bookfair.backend.exception;
 
 import java.util.List;
+import java.util.Map;
 
+import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -130,6 +133,47 @@ public class GlobalExceptionHandler {
                 return ResponseEntity.status(HttpStatus.CONFLICT)
                                 .body(ErrorResponse.build(HttpStatus.CONFLICT, ex.getMessage(), null,
                                                 ErrorCode.BUSINESS_RULE_VIOLATION));
+        }
+
+        @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
+        public ResponseEntity<ErrorResponse> handleOptimisticLockingFailure(ObjectOptimisticLockingFailureException ex) {
+                log.warn("Optimistic locking failure: {}", ex.getMessage());
+
+                return ResponseEntity.status(HttpStatus.CONFLICT)
+                                .body(ErrorResponse.build(HttpStatus.CONFLICT,
+                                                "The item you are trying to modify was just updated or reserved by someone else. Please refresh the page.",
+                                                null,
+                                                ErrorCode.RESOURCE_CONFLICT));
+        }
+
+        @ExceptionHandler(CannotAcquireLockException.class)
+        public ResponseEntity<ErrorResponse> handlePessimisticLockTimeout(CannotAcquireLockException ex) {
+                log.warn("Pessimistic lock timeout: {}", ex.getMessage());
+
+                return ResponseEntity.status(HttpStatus.CONFLICT)
+                                .body(ErrorResponse.build(HttpStatus.CONFLICT,
+                                                "The system is experiencing extreme demand for this specific item. Please try clicking reserve again.",
+                                                null,
+                                                ErrorCode.SYSTEM_BUSY));
+        }
+
+        @ExceptionHandler(SpaceConflictException.class)
+        public ResponseEntity<ErrorResponse> handleSpaceConflict(SpaceConflictException ex) {
+                List<Map<String, Object>> details = ex.getConflicts().stream()
+                        .<Map<String, Object>>map(c -> Map.of(
+                                "level", c.level().name(),
+                                "spaceId", c.spaceId(),
+                                "spaceName", c.spaceName(),
+                                "conflictingEventName", c.conflictingBooking().getEvent().getName(),
+                                "conflictStart", c.conflictingBooking().getStartsAt(),
+                                "conflictEnd", c.conflictingBooking().getEndsAt()))
+                        .toList();
+
+                return ResponseEntity.status(HttpStatus.CONFLICT)
+                                .body(ErrorResponse.build(HttpStatus.CONFLICT,
+                                                "Some selected spaces are not available",
+                                                details,
+                                                ErrorCode.SPACE_CONFLICT));
         }
 
         @ExceptionHandler(Exception.class)

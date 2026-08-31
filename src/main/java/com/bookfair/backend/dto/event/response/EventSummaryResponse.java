@@ -2,34 +2,13 @@ package com.bookfair.backend.dto.event.response;
 
 import java.time.Instant;
 import java.util.UUID;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
 
-@Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
-public class EventSummaryResponse {
-    private UUID id;
-    private String name;
-    private String eventType;
-    private Instant startDate;
-    private Instant endDate;
-    private String status;
-    private Boolean active;
-
-
-
-
-
-
-
-
-
-
-
-
-
-}
+public record EventSummaryResponse(
+    UUID id,
+    String name,
+    String eventType,
+    Instant startDate,
+    Instant endDate,
+    String status,
+    Boolean active
+) {}

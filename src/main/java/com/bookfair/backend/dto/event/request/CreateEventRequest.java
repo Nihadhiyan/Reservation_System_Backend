@@ -4,41 +4,33 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
-import com.bookfair.backend.model.Event;
+import com.bookfair.backend.model.enums.EventStatus;
+import com.bookfair.backend.model.enums.EventType;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
 
-@Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
-public class CreateEventRequest {
-
+public record CreateEventRequest(
     @NotBlank(message = "Event name is required")
-    private String name;
+    String name,
 
     @NotNull(message = "Venue ID is required")
-    private UUID venueId;
+    UUID venueId,
 
     @NotNull(message = "Organizer ID is required")
-    private UUID organizerId;
+    UUID organizerId,
 
-    private List<UUID> partnerIds;
+    List<UUID> partnerIds,
 
     @NotNull(message = "Event type is required")
-    private Event.EventType eventType;
+    EventType eventType,
 
     @NotNull(message = "Event start date is required")
-    private Instant startDateTime;
+    Instant startDateTime,
 
     @NotNull(message = "Event end date is required")
-    private Instant endDateTime;
+    Instant endDateTime,
 
     @NotNull(message = "Event status is required")
-    private Event.EventStatus status;
-}
+    EventStatus status
+) {}
