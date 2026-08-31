@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.util.Set;
 import java.util.UUID;
 
+import jakarta.validation.constraints.FutureOrPresent;
 import jakarta.validation.constraints.NotNull;
 
 public record CreateReservationRequest(
@@ -17,6 +18,7 @@ public record CreateReservationRequest(
     Set<UUID> stallIds,
 
     @NotNull(message = "Reservation start time is required")
+    @FutureOrPresent(message = "Reservation start time cannot be in the past")
     Instant reservationStartDateTime,
 
     @NotNull(message = "Expiration time is required")

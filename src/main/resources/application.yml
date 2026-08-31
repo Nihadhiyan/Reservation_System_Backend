@@ -146,6 +146,20 @@ keycloak:
 # ===============================
 server:
   port: 4000
+  ssl:
+    # Self-signed cert for local/dev use (src/main/resources/keystore/keystore.p12,
+    # CN=localhost, SAN=localhost+127.0.0.1, 10y validity — regenerate with
+    # `keytool -genkeypair -alias clausis -keyalg RSA -keysize 2048 -storetype PKCS12
+    # -keystore keystore.p12 -validity 3650 -dname "CN=localhost" -ext
+    # "SAN=dns:localhost,ip:127.0.0.1"` if it expires or a real cert is swapped in).
+    # Browsers/curl will warn on the self-signed cert; that's expected for local
+    # HTTPS and is not a vulnerability in itself — it's not a CA-trusted cert, but
+    # the channel itself is genuinely encrypted (TLS, not plaintext HTTP).
+    enabled: ${SSL_ENABLED:true}
+    key-store: classpath:keystore/keystore.p12
+    key-store-password: ${SSL_KEYSTORE_PASSWORD:changeit}
+    key-store-type: PKCS12
+    key-alias: clausis
 
 # ===============================
 # Stripe Configuration

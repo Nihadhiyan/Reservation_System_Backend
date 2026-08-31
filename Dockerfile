@@ -47,8 +47,11 @@ EXPOSE 8080
 
 # Relies on management.endpoint.health.probes.enabled=true (application.yml) so
 # /actuator/health/liveness exists outside a Kubernetes-detected environment too.
+# https + --no-check-certificate: the app now serves TLS only (server.ssl.enabled),
+# using a self-signed dev cert — wget would otherwise fail this check on the
+# untrusted-CA chain even though the app itself is healthy.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:8080/actuator/health/liveness || exit 1
+    CMD wget --no-verbose --tries=1 --no-check-certificate --spider https://localhost:8080/actuator/health/liveness || exit 1
 
 # -XX:+UseContainerSupport: respect the container's cgroup memory/CPU limits
 #   rather than the host's, so heap sizing doesn't ignore a Kubernetes resource limit.
