@@ -1,5 +1,9 @@
 # Reservation System — Backend
 
+*Read the full engineering deep dive on Medium: [Engineering Clausis Reserve](https://medium.com/@Nihadhiyan/engineering-clausis-reserve-a-journey-through-high-concurrency-multi-tenancy-and-stateless-12da6f1e8726)*
+
+*Frontend Repository: [Reservation_System_Frontend](https://github.com/Nihadhiyan/Reservation_System_Frontend.git)*
+
 This repository contains the Spring Boot API and event-driven architecture for the venue & stall reservation system.
 
 A Spring Boot backend for managing venues, halls, floor layouts, and stall reservations — from stall/pricing setup to reservation, payment (Stripe), settlement, and notifications.
