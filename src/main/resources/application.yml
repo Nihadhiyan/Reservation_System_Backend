@@ -1,0 +1,178 @@
+spring:
+  application:
+    name: backend
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}
+
+# ===============================
+# Logging — explicit console pattern
+# ===============================
+# Spring Boot's default tracing-aware pattern embeds trace/span IDs as
+# "[backend,<traceId>,<spanId>]" with no field labels, which is fragile to
+# regex against (any future change to the default format silently breaks log
+# parsing). Defining it explicitly with "traceId=...,spanId=..." keys makes
+# both human reading and Promtail/Grafana regex extraction predictable and
+# independent of Spring Boot's internal default.
+logging:
+  pattern:
+    console: "%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} %5p [traceId=%X{traceId:-},spanId=%X{spanId:-}] %-40.40logger{39} : %msg%n"
+
+  # ===============================
+  # Default Database & JPA Settings
+  # ===============================
+  datasource:
+    url: ${DB_URL:jdbc:h2:mem:bookfairdb}
+    driverClassName: ${DB_DRIVER:org.h2.Driver}
+    username: ${DB_USER:sa}
+    password: ${DB_PASSWORD:password}
+    hikari:
+      register-mbeans: true
+      pool-name: BookFairHikariCP
+      leak-detection-threshold: 2000
+
+  h2:
+    console:
+      enabled: ${H2_CONSOLE_ENABLED:true}
+      path: /h2-console
+
+  jpa:
+    database-platform: ${JPA_PLATFORM:org.hibernate.dialect.H2Dialect}
+    # Flyway is the source of truth for schema — 'validate' checks entities against
+    # the Flyway-managed schema at startup without letting Hibernate auto-alter it.
+    hibernate:
+      ddl-auto: ${DDL_AUTO:validate}
+    show-sql: ${SHOW_SQL:true}
+    properties:
+      hibernate:
+        "[format_sql]": ${FORMAT_SQL:true}
+    defer-datasource-initialization: ${DEFER_INIT:false}
+
+  sql:
+    init:
+      mode: ${SQL_INIT_MODE:always}
+
+  # ===============================
+  # Jackson Configuration
+  # ===============================
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+    default-property-inclusion: non_null
+
+  # ===============================
+  # Email Configuration
+  # ===============================
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: pvtchins@gmail.com
+    password: ${SMTP_PW}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+
+  # ===============================
+  # Cache & Redis Configuration
+  # ===============================
+  cache:
+    type: redis
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
+  # ===============================
+  # Flyway Migration Configuration
+  # ===============================
+  flyway:
+    enabled: ${FLYWAY_ENABLED:true}
+    baseline-on-migrate: ${FLYWAY_BASELINE:true}
+    locations: classpath:db/migration
+
+  # ===============================
+  # Kafka Configuration
+  # ===============================
+  kafka:
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      properties:
+        spring.json.add.type.headers: true
+    consumer:
+      group-id: clausis-reservation-group
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "com.bookfair.backend.*"
+
+# ===============================
+# Application & Security Config
+# ===============================
+app:
+  security:
+    pii-secret: ${PII_SECRET_KEY}
+    access-token-expiration-ms: ${ACCESS_TOKEN_EXPIRATION_MS:3600000}
+    refresh-token-expiration-ms: ${REFRESH_TOKEN_EXPIRATION_MS:3600000}
+    password-reset-and-verification-token-expiration-ms: ${PASSWORD_RESET_AND_VERIFICATION_TOKEN_EXPIRATION_MS:600000}
+    ip-rate-limit-requests-per-minute: ${IP_RATE_LIMIT_REQUESTS_PER_MINUTE:100}
+    ip-rate-limit-time-window-seconds: ${IP_RATE_LIMIT_TIME_WINDOW_SECONDS:60}
+    user-quota-limit-requests-per-minute: ${USER_QUOTA_LIMIT_REQUESTS_PER_MINUTE:100}
+    user-quota-limit-time-window-seconds: ${USER_QUOTA_LIMIT_TIME_WINDOW_SECONDS:60}
+  jwt-secret: ${JWT_SECRET}
+  cors:
+    allowed-origins: ${CORS_ORIGINS:http://localhost:5173}
+
+# ===============================
+# Server Configuration
+# ===============================
+server:
+  port: 4000
+
+# ===============================
+# Stripe Configuration
+# ===============================
+stripe:
+  api:
+    key: ${STRIPE_SECRET_KEY}
+  webhook:
+    secret: ${STRIPE_WEBHOOK_SECRET}
+  checkout:
+    success-url: ${STRIPE_CHECKOUT_SUCCESS_URL:http://localhost:5173/booking-success?session_id={CHECKOUT_SESSION_ID}}
+    cancel-url: ${STRIPE_CHECKOUT_CANCEL_URL:http://localhost:5173/booking-cancel}
+
+# ===============================
+# Observability & Monitoring
+# ===============================
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+  tracing:
+    sampling:
+      probability: ${TRACING_SAMPLING_PROBABILITY:1.0}
+  zipkin:
+    tracing:
+      endpoint: ${ZIPKIN_TRACING_ENDPOINT:http://localhost:9411/api/v2/spans}
+
+# ===============================
+# Custom Features
+# ===============================
+clausis:
+  features:
+    kafka-enabled: ${KAFKA_ENABLED:true}
