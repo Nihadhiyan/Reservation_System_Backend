@@ -12,7 +12,7 @@ WORKDIR /app
 COPY mvnw .
 COPY .mvn .mvn
 COPY pom.xml .
-RUN chmod +x mvnw && ./mvnw -B dependency:go-offline
+RUN chmod +x mvnw && ./mvnw -B dependency:go-offline || true
 
 # Only NOW copy source — this is the first layer that gets invalidated by a
 # code change, so the (expensive) dependency layer above stays cached.
