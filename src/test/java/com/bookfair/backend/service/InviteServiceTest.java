@@ -62,7 +62,7 @@ class InviteServiceTest {
 
     @Test
     void inviteUser_rejectsWhenActiveInviteAlreadyExists() {
-        InviteRequest request = new InviteRequest(orgId, "vendor@example.com", OrganizationRole.ORG_MEMBER);
+        InviteRequest request = new InviteRequest(orgId, "vendor@example.com", OrganizationRole.ORG_MEMBER, false);
         when(organizationRepository.findByIdAndActiveTrue(orgId)).thenReturn(Optional.of(org));
         when(inviteRepository.existsByEmailAndOrganizationIdAndUsedFalseAndExpiresAtAfter(
                 eq("vendor@example.com"), eq(orgId), any())).thenReturn(true);
@@ -75,7 +75,7 @@ class InviteServiceTest {
 
     @Test
     void inviteUser_rejectsWhenEmailAlreadyBelongsToAMember() {
-        InviteRequest request = new InviteRequest(orgId, "vendor@example.com", OrganizationRole.ORG_MEMBER);
+        InviteRequest request = new InviteRequest(orgId, "vendor@example.com", OrganizationRole.ORG_MEMBER, false);
         when(organizationRepository.findByIdAndActiveTrue(orgId)).thenReturn(Optional.of(org));
         when(inviteRepository.existsByEmailAndOrganizationIdAndUsedFalseAndExpiresAtAfter(any(), any(), any()))
                 .thenReturn(false);
@@ -91,7 +91,7 @@ class InviteServiceTest {
 
     @Test
     void inviteUser_rejectsForInactiveOrganization() {
-        InviteRequest request = new InviteRequest(orgId, "vendor@example.com", OrganizationRole.ORG_MEMBER);
+        InviteRequest request = new InviteRequest(orgId, "vendor@example.com", OrganizationRole.ORG_MEMBER, false);
         // Regression test: inviteUser must use findByIdAndActiveTrue, not findById.
         when(organizationRepository.findByIdAndActiveTrue(orgId)).thenReturn(Optional.empty());
 
@@ -101,7 +101,7 @@ class InviteServiceTest {
 
     @Test
     void inviteUser_sendsInvite_whenNoConflicts() {
-        InviteRequest request = new InviteRequest(orgId, "vendor@example.com", OrganizationRole.ORG_MEMBER);
+        InviteRequest request = new InviteRequest(orgId, "vendor@example.com", OrganizationRole.ORG_MEMBER, false);
         when(organizationRepository.findByIdAndActiveTrue(orgId)).thenReturn(Optional.of(org));
         when(inviteRepository.existsByEmailAndOrganizationIdAndUsedFalseAndExpiresAtAfter(any(), any(), any()))
                 .thenReturn(false);

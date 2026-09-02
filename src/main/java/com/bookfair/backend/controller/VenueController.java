@@ -83,6 +83,15 @@ public class VenueController {
         return ResponseEntity.ok(new ApiResponseDto<>(true, "Venue deactivated successfully", null, Instant.now()));
     }
 
+    // Manual review of a venue's Premise ID by a super admin — same workflow
+    // as POST /organizations/{id}/verify for the business registration number.
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    @PostMapping("/{id}/verify")
+    public ResponseEntity<ApiResponseDto<Void>> verifyVenue(@PathVariable UUID id) {
+        venueService.verifyVenue(id);
+        return ResponseEntity.ok(new ApiResponseDto<>(true, "Venue verified successfully", null, Instant.now()));
+    }
+
     @GetMapping("/{venueId}/buildings")
     public ResponseEntity<ApiResponseDto<List<BuildingResponse>>> getBuildingsByVenue(@PathVariable UUID venueId) {
         List<BuildingResponse> response = venueService.getBuildingsByVenue(venueId);

@@ -14,5 +14,10 @@ public record InviteRequest(
     String email,
 
     @NotNull(message = "Role is required")
-    OrganizationRole role
+    OrganizationRole role,
+
+    // Set true to proceed after already having been warned (via
+    // ErrorCode.CONFIRMATION_REQUIRED) that the invitee is an ORG_ADMIN in
+    // another organization. Absent/false on the inviter's first attempt.
+    Boolean confirmed
 ) {}

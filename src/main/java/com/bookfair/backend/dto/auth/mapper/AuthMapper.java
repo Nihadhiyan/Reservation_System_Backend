@@ -17,6 +17,9 @@ import com.bookfair.backend.model.User;
 public interface AuthMapper {
     AuthResponse toAuthResponse(User user, String accessToken, String refreshToken, Long expiresIn);
 
+    // systemRole -> role: names don't match so MapStruct won't auto-map it,
+    // and without this the frontend never learns a user is SUPER_ADMIN.
+    @Mapping(source = "systemRole", target = "role")
     UserProfileResponse toUserProfileResponse(User user);
 
     @Mapping(target = "id", ignore = true)

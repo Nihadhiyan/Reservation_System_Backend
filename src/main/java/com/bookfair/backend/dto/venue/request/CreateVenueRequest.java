@@ -54,6 +54,9 @@ public record CreateVenueRequest(
     @NotBlank(message = "Blueprint image url is required")
     String blueprintImageUrl,
 
+    @NotBlank(message = "Premise ID is required")
+    String premiseId,
+
     @NotNull(message = "Total square footage is required")
     Double totalSquareFootage,
 

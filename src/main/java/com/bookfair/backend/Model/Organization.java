@@ -71,7 +71,7 @@ public class Organization extends BaseEntity {
     @ToString.Exclude
     @EqualsAndHashCode.Exclude
     private String registrationNumber;
- 
+
     @ElementCollection(targetClass = OrganizationCapability.class, fetch = FetchType.EAGER)
     @CollectionTable(
         name = "organization_capabilities",

@@ -21,10 +21,12 @@ public record VenueResponse(
     String googlePlaceId,
     String mapImageUrl,
     String blueprintImageUrl,
+    String premiseId,
     Double totalSquareFootage,
     Boolean parkingAvailable,
     Boolean foodCourtAvailable,
     SimpleOrganizationDto owner,
     List<SimpleOrganizationDto> partners,
+    Boolean verified,
     Boolean active
 ) {}

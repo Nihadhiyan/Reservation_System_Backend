@@ -63,6 +63,12 @@ public class VenueService {
                                         ErrorCode.BUSINESS_RULE_VIOLATION);
                 }
 
+                if (venueRepository.existsByPremiseIdAndActiveTrue(requireNonNull(request.premiseId()))) {
+                        throw new DuplicateResourceException(
+                                        "A venue with this Premise ID is already registered.",
+                                        ErrorCode.DUPLICATE_PREMISE_ID);
+                }
+
                 Organization owner = organizationRepository.findById(requireNonNull(request.ownerOrganizationId()))
                                 .orElseThrow(
                                                 () -> new ResourceNotFoundException("Owner org not found",
@@ -76,6 +82,7 @@ public class VenueService {
 
                 Venue venue = venueMapper.toVenueFromCreateVenueRequest(request);
                 venue.setActive(true);
+                venue.setVerified(false);
                 venue.setOwner(owner);
                 venue.setPartners(partners);
 
@@ -159,6 +166,23 @@ public class VenueService {
                         eventPublisher.publishEvent(new VenueUpdatedEvent(saved.getId()));
                 }
                 return venueMapper.toVenueResponse(saved);
+        }
+
+        @PreAuthorize("hasRole('SUPER_ADMIN')")
+        @Transactional
+        public void verifyVenue(UUID id) {
+                Venue venue = venueRepository.findByIdAndActiveTrue(requireNonNull(id))
+                                .orElseThrow(() -> new ResourceNotFoundException(
+                                                "Venue not found with ID: " + id,
+                                                ErrorCode.VENUE_NOT_FOUND));
+
+                if (Boolean.TRUE.equals(venue.getVerified())) {
+                        throw new BusinessException("Venue is already verified.", ErrorCode.BUSINESS_RULE_VIOLATION);
+                }
+
+                venue.setVerified(true);
+                venueRepository.save(venue);
+                eventPublisher.publishEvent(new VenueUpdatedEvent(venue.getId()));
         }
 
         @Transactional

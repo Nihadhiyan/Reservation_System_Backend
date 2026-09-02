@@ -89,6 +89,25 @@ public class Venue extends BaseEntity {
     @Column(name = "google_place_id")
     private String googlePlaceId;
 
+    // Government/municipal registration number for this specific physical
+    // premises. Required (every venue is a real place) and unique — lives on
+    // Venue rather than Organization since one organization can own several
+    // venues, each with its own premise ID. Deliberately not PII-encrypted:
+    // PiiEncryptionConverter uses a random IV per value, so identical
+    // plaintexts never produce identical ciphertexts, which would make the
+    // UNIQUE constraint (and the duplicate-check in VenueService) useless —
+    // and unlike a phone number/address, a premises registration number is
+    // typically public record in most jurisdictions anyway.
+    @Column(name = "premise_id", nullable = false, unique = true)
+    @NotBlank(message = "Premise ID is required")
+    private String premiseId;
+
+    // Manually confirmed by a super admin (POST /venues/{id}/verify) —
+    // mirrors Organization.verified / the business-registration-number
+    // review workflow, applied here to the premise ID instead.
+    @Column(name = "verified", nullable = false)
+    private Boolean verified = false;
+
     @Column(name = "map_image_url")
     private String mapImageUrl;
 

@@ -8,6 +8,7 @@ import com.bookfair.backend.exception.BusinessException;
 import com.bookfair.backend.exception.ErrorCode;
 import com.bookfair.backend.exception.ResourceNotFoundException;
 import com.bookfair.backend.model.*;
+import com.bookfair.backend.model.enums.OrganizationRole;
 import com.bookfair.backend.repository.*;
 import com.bookfair.backend.security.JwtService;
 import lombok.RequiredArgsConstructor;
@@ -61,6 +62,22 @@ public class InviteService {
                 throw new BusinessException(
                         "This user is already a member of the organization.",
                         ErrorCode.BUSINESS_RULE_VIOLATION);
+            }
+
+            // Someone who already runs another organization is unusual enough to
+            // be worth a deliberate choice, not a silent invite — regardless of
+            // which role they're being offered here. Surface it once and let
+            // the inviter decide, rather than blocking it outright (there's no
+            // rule against it, just enough ambiguity that it shouldn't happen
+            // by accident).
+            boolean alreadyOrgAdminElsewhere = memberRepository
+                    .existsByUserIdAndRoleAndActiveTrue(existingUser.getId(), OrganizationRole.ORG_ADMIN);
+
+            if (alreadyOrgAdminElsewhere && !Boolean.TRUE.equals(request.confirmed())) {
+                throw new BusinessException(
+                        "This user is already an Organization Admin in another organization. "
+                                + "Send the invite anyway?",
+                        ErrorCode.CONFIRMATION_REQUIRED);
             }
         });
 

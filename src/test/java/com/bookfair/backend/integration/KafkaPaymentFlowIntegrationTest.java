@@ -68,6 +68,7 @@ class KafkaPaymentFlowIntegrationTest extends AbstractIntegrationTest {
         venue.setEmail("venue" + UUID.randomUUID() + "@example.com");
         venue.setTotalSquareFootage(10000.0);
         venue.setOwner(org);
+        venue.setPremiseId("TEST-PREMISE-" + UUID.randomUUID());
         venue = venueRepository.save(venue);
 
         Building building = new Building();

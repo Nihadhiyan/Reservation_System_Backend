@@ -37,4 +37,6 @@ public interface VenueRepository extends JpaRepository<Venue, UUID> {
     boolean existsByIdAndActiveTrue(UUID id);
 
     Optional<Venue> findByIdAndActiveTrue(UUID id);
+
+    boolean existsByPremiseIdAndActiveTrue(String premiseId);
 }
