@@ -18,22 +18,11 @@ import com.bookfair.backend.exception.ErrorCode;
 import com.bookfair.backend.exception.UnauthorizedException;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import org.springframework.stereotype.Service;
 
 import lombok.extern.slf4j.Slf4j;
 
-/**
- * Thin client for the parts of Keycloak our backend talks to directly:
- * exchanging credentials/refresh tokens for a session (Resource Owner
- * Password Credentials grant — deliberately kept server-side so the
- * frontend's existing login form never changes), ending a session, and
- * provisioning/updating user credentials via the Admin REST API.
- *
- * Inbound request authentication (validating a Bearer token already issued
- * by Keycloak) is handled separately by Spring's OAuth2 resource server
- * support — this class is only for the outbound calls our own backend makes
- * to Keycloak's token and admin endpoints.
- */
-@org.springframework.stereotype.Service
+@Service
 @Slf4j
 public class KeycloakIdentityService {
 
@@ -81,30 +70,16 @@ public class KeycloakIdentityService {
                     .retrieve()
                     .toBodilessEntity();
         } catch (RestClientException e) {
-            // Logout is best-effort from the caller's perspective — the frontend
-            // discards its tokens either way, and our own jti blacklist (see
-            // AuthService.logout) already revokes the access token immediately.
-            // A failed Keycloak-side session teardown just means that refresh
-            // token lingers until its natural expiry instead of being revoked early.
             log.warn("Keycloak logout call failed (non-fatal): {}", e.getMessage());
         }
     }
 
-    /** Creates the Keycloak-side credential store for a newly registered local user. */
     public void createUser(String username, String email, String password) {
         Map<String, Object> body = Map.of(
                 "username", username,
                 "email", email,
                 "enabled", true,
                 "emailVerified", false,
-                // Our own User entity has no first/last name fields — this app only
-                // collects a username — but Keycloak's default realm User Profile
-                // schema marks firstName/lastName as required. Leaving them unset
-                // makes Keycloak dynamically attach a VERIFY_PROFILE requirement
-                // that silently rejects every password-grant login with
-                // "Account is not fully set up" (confirmed against a real Keycloak
-                // instance), since that required action can only be resolved through
-                // Keycloak's own hosted UI, which this app's login flow never visits.
                 "firstName", username,
                 "lastName", "User",
                 "credentials", List.of(Map.of(

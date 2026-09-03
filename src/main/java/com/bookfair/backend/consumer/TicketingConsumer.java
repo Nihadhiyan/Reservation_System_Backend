@@ -53,12 +53,6 @@ public class TicketingConsumer {
         log.info("Ticket successfully generated and reservation {} confirmed", event.reservationId());
     }
 
-    // The locked PENDING-scoped read above found nothing — either the reservation doesn't
-    // exist, it's already been confirmed by an earlier (at-least-once) delivery of this same
-    // event, or it's in some other terminal state (EXPIRED/CANCELLED/REFUNDED). Only the
-    // "already confirmed by us" case is a safe no-op; every other case means a payment
-    // succeeded for a reservation that's no longer valid to fulfill, and must not be
-    // silently resurrected back into CONFIRMED.
     private void handleNotPending(PaymentCompletedEvent event) {
         Reservation current = reservationRepository.findById(event.reservationId()).orElse(null);
 

@@ -14,14 +14,6 @@ import org.testcontainers.utility.DockerImageName;
 
 import javax.sql.DataSource;
 
-/**
- * Shared base for every Testcontainers-backed integration test. Containers are
- * started ONCE per JVM (static fields, no @Container/@Testcontainers lifecycle
- * management restarting them per class) and reused across every subclass —
- * starting a fresh Postgres+Kafka pair per test class would make the suite
- * take minutes instead of seconds without buying any extra isolation, since
- * each test already gets a clean slate via @BeforeEach cleanup.
- */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @Testcontainers(disabledWithoutDocker = true)
 public abstract class AbstractIntegrationTest {
@@ -31,11 +23,6 @@ public abstract class AbstractIntegrationTest {
             .withDatabaseName("clausis_test")
             .withReuse(true);
 
-    // The org.testcontainers.containers.KafkaContainer class (not the newer
-    // org.testcontainers.kafka.KafkaContainer, which targets the apache/kafka
-    // native image's own startup scripts and fails against Confluent images even
-    // with asCompatibleSubstituteFor) — this one is built for Confluent images and
-    // has first-class KRaft support via withKraft().
     static final KafkaContainer KAFKA = new KafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:7.4.4"))
             .withKraft()
             .withReuse(true);
@@ -58,10 +45,6 @@ public abstract class AbstractIntegrationTest {
 
     @BeforeEach
     void cleanDatabase() throws Exception {
-        // Truncate every app table between tests rather than relying on transaction
-        // rollback — @SpringBootTest with RANDOM_PORT makes real HTTP calls through
-        // a separate thread/connection than the test method, so @Transactional
-        // test-rollback doesn't apply here the way it does for @DataJpaTest-style tests.
         try (var connection = dataSource.getConnection();
              var statement = connection.createStatement()) {
             statement.execute("""

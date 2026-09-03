@@ -46,20 +46,8 @@ public class SecurityConfig {
                 .authorizeHttpRequests(request -> request
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/api/v1/auth/**").permitAll()
-                        // Public browsing surface: the frontend's home/events/venues pages
-                        // (HomePage, EventsPage, EventDetailsPage, VenuesPage, VenueDetailsPage)
-                        // are unauthenticated routes by design — a visitor should be able to
-                        // browse exhibitions and venues before creating an account. Every
-                        // other events/venues endpoint (create/update/delete, stall
-                        // assignment, etc.) still falls through to .anyRequest().authenticated()
-                        // or its own @PreAuthorize below.
                         .requestMatchers(HttpMethod.GET, "/api/v1/events", "/api/v1/events/*", "/api/v1/events/*/stalls").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/venues", "/api/v1/venues/*", "/api/v1/venues/*/buildings").permitAll()
-                        // "/actuator/health" alone is an EXACT match, not a prefix — it
-                        // never covered /actuator/health/liveness or /readiness (what the
-                        // Docker healthcheck and Kubernetes-style probes actually hit),
-                        // which fell through to the SUPER_ADMIN rule below and made every
-                        // health probe fail with 401. /** covers the sub-paths too.
                         .requestMatchers("/actuator/health/**").permitAll()
                         .requestMatchers("/actuator/**").hasRole("SUPER_ADMIN")
                         .anyRequest().authenticated())
@@ -76,9 +64,6 @@ public class SecurityConfig {
                 .build();
     }
 
-    // This was previously defined but never invoked, so @Async threads never actually
-    // inherited the caller's SecurityContext. Wiring it at startup so any current or
-    // future @Async code that reads SecurityContextHolder behaves as originally intended.
     @PostConstruct
     public void enableAuthForwarding() {
         // This tells Spring: "When you spawn an Async thread, copy the User's ID into

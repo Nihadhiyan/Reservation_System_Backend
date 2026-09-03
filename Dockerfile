@@ -4,34 +4,19 @@
 FROM eclipse-temurin:21-jdk-alpine AS builder
 WORKDIR /app
 
-# Copy only the files needed to resolve dependencies first. Docker caches each
-# layer by the hash of what it COPYs; as long as pom.xml/mvnw/.mvn don't change,
-# this layer (and the dependency download inside it) is reused on every rebuild
-# even when application source changes — avoiding a full dependency re-download
-# on every single code edit.
 COPY mvnw .
 COPY .mvn .mvn
 COPY pom.xml .
 RUN chmod +x mvnw && ./mvnw -B dependency:go-offline || true
 
-# Only NOW copy source — this is the first layer that gets invalidated by a
-# code change, so the (expensive) dependency layer above stays cached.
 COPY src src
 RUN ./mvnw -B clean package -DskipTests
 
-# Explode the fat jar into Spring Boot's standard layers (dependencies,
-# spring-boot-loader, snapshot-dependencies, application). Copied as separate
-# COPY --from layers below, so an application-only code change only invalidates
-# the thin "application" layer in the final image — the (large) "dependencies"
-# layer is untouched and reused from the registry cache on push/pull.
 RUN java -Djarmode=layertools -jar target/*.jar extract --destination extracted
 
 # ---------- Runtime stage ----------
 FROM eclipse-temurin:21-jre-alpine
 
-# Non-root user with an explicit UID/GID (not auto-assigned) so Kubernetes'
-# securityContext.runAsUser can be pinned to the same value and verified —
-# an auto-assigned UID isn't guaranteed stable across image rebuilds.
 RUN addgroup -g 1001 -S spring && adduser -u 1001 -S spring -G spring
 WORKDIR /app
 

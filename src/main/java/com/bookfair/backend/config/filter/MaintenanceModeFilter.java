@@ -17,14 +17,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
-/**
- * Blocks non-super-admin traffic while {@code AdminService.isMaintenanceMode()}
- * is on, except for auth routes so a super admin can still log in. Split out
- * of the old JwtAuthenticationFilter (which used to run this check inline)
- * when auth verification moved to Spring's OAuth2 resource server — this
- * concern is independent of how a request got authenticated, so it now runs
- * as its own filter, after authentication has been resolved.
- */
+
 @Component
 public class MaintenanceModeFilter extends OncePerRequestFilter {
 

@@ -36,12 +36,6 @@ public class EmailConsumer {
             return;
         }
 
-        // This consumer is independent of TicketingConsumer (separate Kafka consumer group,
-        // no ordering guarantee between them) and only reads the reservation, so it can't rely
-        // on TicketingConsumer having already run. It re-checks the same validity condition
-        // TicketingConsumer enforces (still PENDING-and-not-expired, or already validly
-        // CONFIRMED) so a payment that completes after the hold expired doesn't get a
-        // "Reservation Confirmed" email for a booking that was correctly refused confirmation.
         boolean stillPendingAndValid = reservation.getStatus() == ReservationStatus.PENDING
                 && reservation.getExpiresAt() != null
                 && reservation.getExpiresAt().isAfter(java.time.Instant.now());
@@ -52,9 +46,6 @@ public class EmailConsumer {
                     reservation.getId(), reservation.getStatus(), event.transactionId());
             return;
         }
-
-        // Idempotency: We could check an EmailLog table, or just rely on NotificationService idempotency.
-        // Assuming NotificationService (which handles Tasks) is idempotent based on reservationId + TaskType.
 
         Map<String, Object> vars = new HashMap<>();
         vars.put("userName", reservation.getUser().getUsername());

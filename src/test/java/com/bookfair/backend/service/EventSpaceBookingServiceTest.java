@@ -27,11 +27,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
-/**
- * Covers the cancelBooking authorization fix: previously ANY authenticated
- * user (any org, even unrelated to the event) could cancel any booking simply
- * by knowing its ID — validateCancelPermission closes that gap.
- */
+
 @ExtendWith(MockitoExtension.class)
 class EventSpaceBookingServiceTest {
 

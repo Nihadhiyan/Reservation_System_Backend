@@ -19,12 +19,6 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
-/**
- * Covers the intentional fail-open (reads) vs fail-closed (writes) split:
- * checkpoint/blacklist WRITES must throw on a Redis outage (a security
- * revocation that silently fails to persist is worse than a loud error),
- * while READS must fail open (an outage must not lock everyone out).
- */
 @ExtendWith(MockitoExtension.class)
 class TokenBlacklistServiceTest {
 

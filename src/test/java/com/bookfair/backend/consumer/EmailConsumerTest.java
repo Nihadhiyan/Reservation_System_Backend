@@ -27,13 +27,6 @@ import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
-/**
- * Covers the consistency fix: EmailConsumer must not send a "Reservation
- * Confirmed" email for a reservation that TicketingConsumer would refuse (or
- * has refused) to confirm — the two consumers run independently (separate
- * Kafka consumer groups, no ordering guarantee) so each must reach the same
- * conclusion on its own.
- */
 @ExtendWith(MockitoExtension.class)
 class EmailConsumerTest {
 
@@ -129,7 +122,7 @@ class EmailConsumerTest {
     void stillSendsEmail_whenQrGenerationFails() {
         Reservation reservation = reservationWith(ReservationStatus.PENDING, Instant.now().plus(5, ChronoUnit.MINUTES));
         when(reservationRepository.findById(reservationId)).thenReturn(Optional.of(reservation));
-        when(qrCodeService.generateQRCode(any())).thenThrow(new RuntimeException("zxing boom"));
+        when(qrCodeService.generateQRCode(any())).thenThrow(new RuntimeException("Boom!"));
 
         emailConsumer.sendConfirmationEmail(event);
 

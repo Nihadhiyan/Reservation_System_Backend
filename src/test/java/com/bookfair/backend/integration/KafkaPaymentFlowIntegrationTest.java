@@ -18,19 +18,6 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
-/**
- * Proves the payment-completion Kafka fan-out actually works against a real
- * broker and a real Postgres database — not mocks. This is the only test in
- * the suite that would have caught the application.yml misconfiguration found
- * during the DevOps review (spring.kafka.* nested under management.* instead
- * of spring.*, which silently broke the producer/consumer JSON (de)serializer
- * config): a unit test mocking KafkaTemplate can't detect a broken Spring
- * Kafka autoconfiguration binding, since the mock never touches real config.
- *
- * It also proves the TicketingConsumer race/expiry fix (see TicketingConsumerTest
- * for the isolated-logic version) end-to-end: publish a real PaymentCompletedEvent,
- * let the real @KafkaListener consume it, and assert the database actually changed.
- */
 class KafkaPaymentFlowIntegrationTest extends AbstractIntegrationTest {
 
     @Autowired private KafkaTemplate<String, Object> kafkaTemplate;

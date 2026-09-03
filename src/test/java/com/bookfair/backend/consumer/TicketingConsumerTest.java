@@ -27,12 +27,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
-/**
- * Covers the race-condition / expiry / wrong-state-resurrection bugs fixed in
- * TicketingConsumer: it must never confirm a reservation that isn't (still)
- * genuinely PENDING-and-unexpired, and must treat "already CONFIRMED" as an
- * idempotent no-op rather than an error — Kafka delivers at-least-once.
- */
+
 @ExtendWith(MockitoExtension.class)
 class TicketingConsumerTest {
 

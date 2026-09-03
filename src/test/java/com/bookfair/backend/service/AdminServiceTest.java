@@ -35,13 +35,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
-/**
- * Covers two regressions fixed during the review:
- *  - toggleMaintenanceMode previously published a duplicate SecurityAuditEvent
- *    carrying a stale, never-updated AtomicBoolean (always "false").
- *  - getOrgDashboardStats previously threw ORGANIZATION_NOT_FOUND when the
- *    actual missing thing was the caller's membership record.
- */
+
 @ExtendWith(MockitoExtension.class)
 class AdminServiceTest {
 

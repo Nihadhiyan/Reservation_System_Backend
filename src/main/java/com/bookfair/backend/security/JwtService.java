@@ -19,14 +19,6 @@ import io.jsonwebtoken.security.Keys;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 
-/**
- * Mints and reads the app's own short-lived, single-purpose tokens: password
- * reset, email verification, and organization invite links. These are
- * deliberately NOT part of the Keycloak migration — they're self-contained,
- * one-time-use tokens with no session/authentication role, so there's no
- * equivalent Keycloak flow worth adopting for them. Login/refresh session
- * tokens are now issued by Keycloak instead; see KeycloakIdentityService.
- */
 @Service
 @RequiredArgsConstructor
 public class JwtService {

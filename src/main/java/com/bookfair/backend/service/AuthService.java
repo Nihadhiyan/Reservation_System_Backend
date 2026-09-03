@@ -152,9 +152,6 @@ public class AuthService {
 
         KeycloakIdentityService.TokenResponse tokens;
         try {
-            // loginRequest.username() may actually be the user's email; Keycloak's
-            // own username is canonical, so always exchange with the resolved
-            // local user's real username rather than whatever the caller typed.
             tokens = keycloakIdentityService.passwordGrant(user.getUsername(), loginRequest.password());
         } catch (UnauthorizedException e) {
             loginAttemptService.recordFailedAttempt(username);
@@ -178,9 +175,6 @@ public class AuthService {
         String oldTokenString = refreshTokenRequest.refreshToken();
         requireNonNull(oldTokenString, "Refresh token string cannot be null");
 
-        // Rotation, reuse detection, and expiry are all enforced by Keycloak itself
-        // (the client is configured with revokeRefreshToken) — no local session
-        // table or breach-detection bookkeeping needed on this path any more.
         KeycloakIdentityService.TokenResponse tokens = keycloakIdentityService.refreshGrant(oldTokenString);
 
         String email = extractEmailClaimUnverified(tokens.accessToken());

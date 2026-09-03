@@ -28,11 +28,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
-/**
- * Covers the reactivateHallChildren fix: reactivating a Hall must not silently
- * resurrect stalls that have a genuine BOOKED/BLOCKED EventStall — those need
- * manual review, not automatic reactivation.
- */
+
 @ExtendWith(MockitoExtension.class)
 class HallServiceTest {
 
