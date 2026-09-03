@@ -15,7 +15,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/api/organizations/invites")
+@RequestMapping("/api/v1/organizations/invites")
 @RequiredArgsConstructor
 public class InviteController {
 
