@@ -11,6 +11,7 @@ import com.bookfair.backend.dto.config.GlobalMapperConfig;
 import com.bookfair.backend.dto.organization.request.CreateOrganizationRequest;
 import com.bookfair.backend.dto.organization.request.InviteRequest;
 import com.bookfair.backend.dto.organization.request.UpdateOrganizationRequest;
+import com.bookfair.backend.dto.organization.response.OrganizationMemberResponse;
 import com.bookfair.backend.dto.organization.response.OrganizationResponse;
 import com.bookfair.backend.dto.organization.response.PublicOrganizationResponse;
 import com.bookfair.backend.model.Organization;
@@ -76,5 +77,11 @@ public interface OrganizationMapper {
     @Mapping(target = "createdBy", ignore = true)
     @Mapping(target = "updatedBy", ignore = true)
     OrganizationInvite toOrganizationInvite(Organization organization, InviteRequest request, String token, Instant expiresAt);
+
+    @Mapping(target = "userId", source = "user.id")
+    @Mapping(target = "username", source = "user.username")
+    @Mapping(target = "email", source = "user.email")
+    @Mapping(target = "joinedAt", source = "createdAt")
+    OrganizationMemberResponse toOrganizationMemberResponse(OrganizationMember member);
 }
 

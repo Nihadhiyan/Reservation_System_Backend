@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.bookfair.backend.dto.organization.mapper.OrganizationMapper;
 import com.bookfair.backend.dto.organization.request.CreateOrganizationRequest;
 import com.bookfair.backend.dto.organization.request.UpdateOrganizationRequest;
+import com.bookfair.backend.dto.organization.response.OrganizationMemberResponse;
 import com.bookfair.backend.dto.organization.response.OrganizationResponse;
 import com.bookfair.backend.dto.organization.response.PublicOrganizationResponse;
 import com.bookfair.backend.exception.BusinessException;
@@ -80,6 +81,17 @@ public class OrganizationService {
                 .toList();
     }
 
+    @Transactional(readOnly = true)
+    public List<OrganizationMemberResponse> getMembers(UUID orgId) {
+        requireNonNull(orgId, "orgId cannot be null");
+        organizationRepository.findByIdAndActiveTrue(orgId)
+                .orElseThrow(() -> new ResourceNotFoundException("Organization not found",
+                        ErrorCode.ORGANIZATION_NOT_FOUND));
+        return memberRepository.findByOrganizationIdAndActiveTrue(orgId).stream()
+                .map(organizationMapper::toOrganizationMemberResponse)
+                .toList();
+    }
+
     @Transactional
     public OrganizationResponse createOrganization(CreateOrganizationRequest request) {
         requireNonNull(request, "request cannot be null");
@@ -110,10 +122,6 @@ public class OrganizationService {
                 .orElseThrow(() -> new ResourceNotFoundException("Organization not found",
                         ErrorCode.ORGANIZATION_NOT_FOUND));
 
-        // Authorization is enforced by @orgAuth.isOrgAdmin at the controller — not re-checked
-        // here to avoid two independently-maintained implementations of the same rule.
-
-        // rename conflict check (exclude self)
         if (!organization.getName().equalsIgnoreCase(request.name()) &&
                 organizationRepository.existsByNameAndActiveTrue(requireNonNull(request.name()))) {
             throw new DuplicateResourceException("An organization with this name already exists.",

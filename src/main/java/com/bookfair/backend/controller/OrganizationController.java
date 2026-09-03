@@ -22,6 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.bookfair.backend.dto.common.ApiResponseDto;
 import com.bookfair.backend.dto.organization.request.CreateOrganizationRequest;
 import com.bookfair.backend.dto.organization.request.UpdateOrganizationRequest;
+import com.bookfair.backend.dto.organization.response.OrganizationMemberResponse;
 import com.bookfair.backend.dto.organization.response.OrganizationResponse;
 import com.bookfair.backend.dto.organization.response.PublicOrganizationResponse;
 import com.bookfair.backend.service.OrganizationService;
@@ -83,6 +84,14 @@ public class OrganizationController {
     public ResponseEntity<ApiResponseDto<Void>> deleteOrganization(@PathVariable UUID id) {
         organizationService.deactivateOrganization(id);
         return ResponseEntity.ok(new ApiResponseDto<>(true, "Organization deactivated successfully", null, Instant.now()));
+    }
+
+    @PreAuthorize("@orgAuth.isMemberOf(authentication, #id)")
+    @GetMapping("/{id}/members")
+    public ResponseEntity<ApiResponseDto<List<OrganizationMemberResponse>>> getMembers(@PathVariable UUID id) {
+        List<OrganizationMemberResponse> response = organizationService.getMembers(id);
+        return ResponseEntity
+                .ok(new ApiResponseDto<>(true, "Members retrieved successfully", response, Instant.now()));
     }
 
     @PreAuthorize("hasRole('SUPER_ADMIN')")
